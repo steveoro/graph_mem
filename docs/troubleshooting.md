@@ -159,6 +159,8 @@ Every part failed to give a JSON object with an `architecture` array, so the sca
 
 ### Problem: An import matched facts exactly only
 
+This is the headless JSON import (`graphify:import`, `rails_ast:import`), the only import that still embeds before its lock. An SQL import never embeds in the import itself: its follow-up compares afterwards ([The SQL import's near-duplicate check "couldn't run"](#problem-the-sql-imports-near-duplicate-check-couldnt-run)).
+
 **Symptoms:**
 - The log of an import that completed has one line (1.93.3):
 
@@ -173,7 +175,64 @@ Every part failed to give a JSON object with an `architecture` array, so the sca
 **Solutions:**
 
 1. The facts the line counts were added as new observations. If an entity now holds a fact twice in different words, retire one with Find & supersede or by hand. Running the same import again won't help: the facts now exist, so it matches them exactly and skips them.
-2. This line never comes from the embedding service being down. Then the import fails before it takes the lock, writing nothing, with "Semantic observation de-duplication unavailable: Embedding service is unavailable: …" (the upload and the preview refuse first, with "Import requires the embedding service for observation de-duplication"). Bring the service back (see [operator/embeddings.md](operator/embeddings.md): check the URL and model on the Embeddings page and that the service answers) and run the import again. A database without vector columns fails the import with "Semantic observation de-duplication unavailable" too.
+2. This line never comes from the embedding service being down. Then the import fails before it takes the lock, writing nothing, with "Semantic observation de-duplication unavailable: Embedding service is unavailable: …" (the web import has no such refusal any more: Projects › Imports takes graph_mem-sql scripts only, which import without the embedding service and report what the near-duplicate check could not compare). Bring the service back (see [operator/embeddings.md](operator/embeddings.md): check the URL and model on the Embeddings page and that the service answers) and run the import again. A database without vector columns fails the import with "Semantic observation de-duplication unavailable" too.
+
+### Problem: An SQL import was refused
+
+**Symptoms:** a graph_mem-sql script ([data_exchange.md](data_exchange.md)) does not import. Where the message shows tells you which check said no, and in every case below **nothing was written**.
+
+| Where | Message starts with | Who refused |
+|---|---|---|
+| Projects › Imports upload form, or `graph_mem:import_sql` | "This file was refused before anything ran: …" (the rake task prints "import refused, nothing was written: …" with the same reason) | the validator, before any SQL ran |
+| Projects › Imports upload form, or the preview's Execute | "The import was refused and nothing was written: graph_mem-sql: …" (Execute: "The import did not run and nothing was written: …") | a guard of the script, inside the dry run or the real run |
+| the same pages | "The graph is busy (an import or maintenance holds the membership lock). Nothing was written; try again in a minute." | the membership lock, held by another import, backfill, move or merge |
+| `graph_mem:import_sql` | "import refused, nothing was written: …" followed by a MariaDB message, with no `graph_mem-sql:` prefix | the database, for a value the validator's grammar passes |
+
+**Reading the validator's reasons** (the file itself is wrong):
+
+- "the file is N bytes, over the 50 MB limit" or "the script is over the 50 MB limit": split the export (export fewer roots) or use `NESTED=0`.
+- "not a graph_mem-sql script (no '-- graph_mem-sql v<N>' first line)": a different file, or one that an editor, mail client or download changed at the top.
+- "graph_mem-sql v2 is not known to this graph_mem (it reads v1)": the source machine runs a newer graph_mem than this one. Upgrade the target machine, or export again from an older one.
+- "the body does not match its sha256 (the file was changed or cut)": the file was edited, truncated or re-encoded in transit. Copy it again (binary mode) and compare sizes.
+- "the script has CR characters (its line endings were changed to CRLF)" or "is not valid UTF-8": a transfer or editor changed it. Export again.
+- "the fixed part of the script differs from graph_mem-sql v1 here (edited, or its sql_mode line changed)": the file was edited by hand, or it was exported by a graph_mem whose template for that version differs. Exports are not meant to be edited; export again.
+- "line N of the data part: expected …, found …" (a comment, an unknown table, a column list, a non-literal value): the data part holds something the exporter never writes. Export again.
+- "the header …" lines: a damaged header.
+
+**Reading a guard's message** (the file is well formed, the data or this database says no; each names the field and the row where it can):
+
+- "this database is at schema X, older than the schema of the script (Y); upgrade graph_mem here first": run the newer graph_mem's migrations on the target machine (a plain upgrade), then import.
+- "graph_mem-sql v1 supports schemas up to X, this database is at schema Y; upgrade graph_mem on the source machine and export again": the target machine is newer than the format's `max_schema`. See [format and schema versions](data_exchange.md#format-and-schema-versions).
+- `"<name>" is a Project on one side and not on the other; rename one of them first`: an entity of that name exists here as a non-Project (or the other way round). Rename one side.
+- `memory_entities.name is blank (staged entity N)`, `memory_observations.tags is not an array of strings (staged observation N on "<entity>")`, `confidence 1.5 is not between 0 and 1` and the like: the source graph holds a value this app's models would refuse. Fix it on the source machine and export again.
+- ".updated_at … is more than a day ahead of the clock here": the source machine's clock was ahead (or a row was written with a future date). Fix the row or the clock; the script would otherwise win every newer-wins comparison until that date.
+- `"<name>" would have two part_of parents`, `"<name>" would be part_of itself (a part_of cycle)` or `the project of "<name>" would not match its part_of parent`: the target's `part_of` tree conflicts with the script's in a way the merge can't settle. Look at that entity's parent on both machines, fix one, and run again; see also [membership drift](#problem-membership-drift-an-entity-is-in-the-wrong-project).
+- "the membership lock stayed busy for 60 s": only from a [hand run](data_exchange.md#hand-runs); the app says "The graph is busy" instead. Wait for the other write to end and run again.
+
+**A MariaDB message.** A number the grammar passes but MariaDB rejects (for example `1e999`) fails its statement and rolls the run back. `graph_mem:import_sql` prints the database's message without a backtrace, and the Imports page shows it as "The import was refused and nothing was written" with the same message. Such a value doesn't come from a graph_mem export: the file was edited or written by another tool.
+
+**Solutions:**
+
+1. Fix the cause named in the message, then run the same import again. A refused run leaves no audit row and no operation row, and a dry run never does.
+2. For the busy lock, wait for the other write (System › Background jobs shows what runs) and retry.
+3. Take a backup before the import that finally runs (System › Backups); an SQL import has no one-click undo.
+
+### Problem: The SQL import's near-duplicate check "couldn't run"
+
+**Symptoms:** the import report's **After the import** card says "The near-duplicate check could not run for N new observations (<reason>): reworded duplicates among them were not proposed for review.", or, on an install without vector columns, "The near-duplicate check needs vector columns, which this install doesn't have: …".
+
+**Cause:** the follow-up job proposes a `delete_observation` review row for a new fact that is within `import_observation_duplicate_max_distance` of an active fact the entity already had ([settings](app_settings_reference.md#imports)). It reads the stored embeddings and never embeds, so a new fact that has no embedding yet can't be compared. The reason in the message says why there is none:
+
+- "the embedding service is down": the follow-up's backfill could not reach it, so the new rows stayed unembedded;
+- "they are not embedded yet": the backfill gave up on its lock (another backfill held it through every retry) or didn't reach those rows;
+- the vector-columns hint: this install keeps no vectors, so the check can't run at all (a standing limit).
+
+The import itself is complete: the facts are in, only the review rows for reworded duplicates are missing. Entity-merge review rows are not affected.
+
+**Solutions:**
+
+1. Restore the embedding service (System › Health, [embeddings guide](operator/embeddings.md)) and run the backfill (Embeddings › **Backfill missing**, or `bin/rails embeddings:backfill`).
+2. The check does not run again by itself. Reworded duplicates left among the new facts are found by compaction review, or by Find & supersede on the entity.
 
 ### Problem: The log says "deferred embedding of … failed"
 

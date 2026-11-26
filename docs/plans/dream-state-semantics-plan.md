@@ -116,7 +116,7 @@ The versions, as expected today (each kickoff confirms its own against `version.
 | `part_of` membership, PR 2 | The scan validator and scanner lock order, the rake tasks, dream state and the integrity sweep (`done/part-of-membership-plan.md`) | after PR 1 (shipped) | 1.93.2 |
 | Embeddings outside the membership lock | A follow-up of the membership PRs (`done/part-of-membership-plan.md`, Follow-ups) | after PR 2 (shipped) | 1.93.3 |
 | mcp 1.11.0 | (its own plan) | after the follow-up | 1.93.4 |
-| SQL exchange | (its own plan, four PRs) | after mcp 1.11.0 | 1.94.0 |
+| SQL exchange | (its own plan, five PRs incl. the JSON export's retirement: `done/sql-exchange-plan.md`) | after mcp 1.11.0 (shipped) | 1.94.0 |
 | **R1b** | Retype library `part_of` edges, the orphan rule, the SQL export's scope, dream-state actor on its edges | after the SQL exchange train | 1.95.0 |
 | **R1c** | Removal-style evidence rows | with or right after R1b | with R1b, or 1.95.1 |
 | **R2** | Relation lifecycle | after R1 | 1.96.0 |
@@ -127,9 +127,12 @@ about the size of 1.92.0; R1b is smaller in code but touches membership-adjacent
 Dependencies between the plans:
 
 - The SQL exchange import writes relations with raw `INSERT`s (its staging tables), which skip the
-  model's canonicalization. With R1a first, that plan's import step calls the same canonicalizer on
-  staged relation types (a line to add to `sql-exchange-plan.md` when R1a merges), or every import
-  brings variants back.
+  model's canonicalization. **Done in 1.94.0:** the import canonicalizes the staged relation types with the
+  same canonicalizer and the target machine's mappings (`SqlExport::Template.relation_type`, which the
+  exporter applies too), so an import doesn't bring variants back. A variant of `part_of` that SQL doesn't read
+  as `part_of` (`child_of`) keeps its spelling, as the sweep never writes a `part_of` edge either, and a script
+  run by hand skips the step and leaves it to the sweep (`done/sql-exchange-plan.md`, "As built";
+  [`docs/data_exchange.md`](../data_exchange.md#merge-rules)).
 - R1b moves libraries out of the `part_of` tree, so a project-subtree export no longer contains
   them. That is why it waits: the exchange lands on today's tree, and R1b's kickoff then decides
   whether a subtree export follows a Project's `depends_on` edges (it should, one hop).
