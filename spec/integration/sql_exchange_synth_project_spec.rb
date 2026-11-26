@@ -282,8 +282,9 @@ RSpec.describe "graph_mem-sql: restore an older export over an edited graph" do
 
     # A target that hasn't swapped yet holds the library as a project member. The script's library is
     # global, so the merge (which matches a global row in the global scope only) inserts a global copy
-    # next to the member; the target's own swap then meets that copy and goes through the collision flow.
-    it "into a target that hasn't swapped: a global copy comes in next to the member, and the target's swap flow merges them" do
+    # next to the member; the target's own swap then meets that copy and goes through the collision
+    # flow, which queues the merge of the two libraries and of each same-named child pair.
+    it "into a target that hasn't swapped: a global copy comes in next to the member, and the queued rows alone converge it" do
       build_library!
       script = nil
       ActiveRecord::Base.transaction(requires_new: true) do
@@ -304,28 +305,58 @@ RSpec.describe "graph_mem-sql: restore an older export over an edited graph" do
       expect(sql_counts(result)).to include("entities/new" => 2, "relations/new" => 2)
       expect(ProjectIdBackfill.drift.any?).to be(false)
 
-      # The target's swap is refused (the global copy holds the name) and queues the merge of the copy into the member.
+      # The target's swap is refused (the global copy holds the name) and queues two merges: the copy into
+      # the member, and the copy's child into the member's child of the same name and type.
       swap = swap_library!
       expect(swap).to include(success: false)
       expect(swap[:error]).to include("a global Gem 'SynthLib' (##{copy.id}) already has its name")
-      merge = MaintenanceReportRow.find_by!(kind: "entity_merge")
-      expect(merge.payload).to include("entity_a" => include("entity_id" => copy.id), "entity_b" => include("entity_id" => @lib.id))
+      merges = MaintenanceReportRow.where(kind: "entity_merge").order(:id).to_a
+      expect(merges.map { |row| row.payload.values_at("entity_a", "entity_b").map { |side| side["entity_id"] } })
+        .to eq([ [ copy.id, @lib.id ], [ copy_notes.id, @notes.id ] ])
+      library_merge, child_merge = merges
 
-      # The merge moves the copy's children under the member, into the project, where their names are taken.
-      refused = apply_row(merge)
+      # The library merge first would move the copy's child into the project, where its name is taken.
+      refused = apply_row(library_merge)
       expect(refused).to include(success: false)
       expect(refused[:error]).to include("SynthLib Notes")
 
-      # Merging the child pair first (by hand: nothing queues it) lets the merge and then the swap apply.
-      expect(NodeOperationsStrategy.new.merge_into(copy_notes.id, @notes.id)).to include(success: true)
-      expect(apply_row(merge)).to include(success: true)
+      # The child merge, then the library merge, then the swap: the queued rows alone converge it.
+      expect(apply_row(child_merge)).to include(success: true)
+      expect(apply_row(library_merge)).to include(success: true)
       expect(swap_library!).to include(success: true)
 
       expect(MemoryEntity.where(name: "SynthLib").pluck(:id, :project_id)).to eq([ [ @lib.id, nil ] ])
       expect(MemoryEntity.where(name: "SynthLib Notes").pluck(:id, :project_id)).to eq([ [ @notes.id, nil ] ])
       expect(depends_on?(@app, @lib)).to be(true)
       expect(parent_ids(@lib)).to be_empty
+      expect(parent_ids(@notes)).to eq([ @lib.id ])
       expect(ProjectIdBackfill.drift.any?).to be(false)
+      expect(ProjectIdBackfill.new(out: StringIO.new).run.changed).to eq(0)
+    end
+
+    # An active fact tagged source-fact keeps its tag through the swap, but outside a project the tag is
+    # inert and the model refuses it on save, as the import's checks would: the writer leaves it out.
+    it "carries a swapped library's source fact active and without its tag; the source keeps the tag" do
+      build_library!
+      fact = fs_fact!(@lib, "SynthLib 3 replaces the old parser.", tags: [ "synth" ])
+      swap_library!
+      expect(fact.reload).to have_attributes(status: "active", tags: [ SourceFact::SOURCE_FACT_TAG, "synth" ])
+      project_script = sql_export(@app)
+      library_script = sql_export(@lib)
+      expect(fact.reload.tags).to eq([ SourceFact::SOURCE_FACT_TAG, "synth" ])
+      sql_delete_tree!(@app)
+      sql_delete_tree!(@lib)
+
+      sql_import(project_script)
+
+      copy = global("SynthLib").memory_observations.find_by!(content: fact.content)
+      expect(copy).to have_attributes(status: "active", tags: [ "synth" ])
+      sql_delete_tree!(global("SynthApp"))
+      sql_delete_tree!(global("SynthLib"))
+
+      sql_import(library_script)
+
+      expect(global("SynthLib").memory_observations.find_by!(content: fact.content)).to have_attributes(status: "active", tags: [ "synth" ])
     end
   end
 end
