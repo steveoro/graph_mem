@@ -191,12 +191,13 @@ RSpec.describe 'DataExchange', type: :request do
         sign_in_guest
       end
 
-      it 'answers both formats as it answers the JSON one' do
-        get export_data_exchange_index_path, params: { ids: [ project1.id ] }
-        status = response.status
-        get export_data_exchange_index_path, params: { ids: [ project1.id ], format: 'sql' }
+      it 'refuses either format (403) and sends no graph data' do
+        [ nil, 'json', 'sql' ].each do |format|
+          get export_data_exchange_index_path, params: { ids: [ project1.id ], format: format }.compact
 
-        expect(response.status).to eq(status)
+          expect(response).to have_http_status(:forbidden)
+          expect(response.body).not_to include(project1.name)
+        end
       end
     end
   end
