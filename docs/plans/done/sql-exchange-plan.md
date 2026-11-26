@@ -1,6 +1,6 @@
 # Plan: SQL-script export/import for graph_mem (idempotent project sync)
 
-**✅ DONE:** shipped as **1.94.0** in four PRs: steps 1 and 2 as #199 and #200, steps 3 and 4 as the two PRs after them. See "As built" at the end.
+**✅ DONE:** shipped as **1.94.0** in five PRs: steps 1 to 3 as #199, #200 and #201, the JSON retirement as #202, and step 4 (the docs and the release) as #203. See "As built" at the end.
 
 > Status: **complete.** Approved by Steve on 2026-11-19. Written against `main` at ef3c900 (1.91.0),
 > rechecked against `main` at a0869d4 (still 1.91.0). The text below is the plan as approved and
@@ -497,10 +497,10 @@ source machine → target machine run with `DRY_RUN=1` first. `bundle exec ruboc
 What shipped, and where it differs from the text above. The code, the specs, [`CHANGELOG.md`](../../../CHANGELOG.md) and the operator
 reference [`docs/data_exchange.md`](../../data_exchange.md) are the source of truth.
 
-**Delivery.** PR 1 (services, template v1, validator, executor, both rake tasks, Cloud toggle `touch: false`,
-the scenario spec), PR 2 (the import UI, `SqlImportFollowUpJob`, the contradiction hook, full maintenance), PR 3 (the
-export format choice, `ExportJob`, the sync endpoint's `format`) and PR 4 (the docs and the release). No migration, no
-new MCP tool, no new `OperationProgress` type. Tool counts stay 12 / 9 / 22.
+**Delivery.** PR 1 (#199: services, template v1, validator, executor, both rake tasks, Cloud toggle `touch: false`,
+the scenario spec), PR 2 (#200: the import UI, `SqlImportFollowUpJob`, the contradiction hook, full maintenance), PR 3
+(#201: the export format choice, `ExportJob`, the sync endpoint's `format`), the JSON retirement (#202) and PR 4 (#203:
+the docs and the release). No migration, no new MCP tool, no new `OperationProgress` type. Tool counts stay 12 / 9 / 22.
 
 **Differences from the plan above.**
 
@@ -529,7 +529,8 @@ new MCP tool, no new `OperationProgress` type. Tool counts stay 12 / 9 / 22.
   DELIMITER-aware splitter.
 - **Guards.** The PR 1 review's value guards, the timestamp guard, the claim rules and the dropped `outdated_by`
   links (see "My calls") shipped as written. A value that passes the grammar and that MariaDB rejects (`1e999`)
-  is a refusal in `graph_mem:import_sql`; the import page doesn't rescue it (a server error, the message in the log).
+  is a refusal everywhere: `graph_mem:import_sql` prints it without a backtrace, and the import page answers 422 with
+  MariaDB's message, on upload and on Execute.
 - **UI.** The preview and the report list the affected rows filterable by table and action, with the entity,
   detail and the changed field names (the old and new values are in the audit rows). Entities link to Explore on
   the report only (a preview's new rows were rolled back). **Download as CSV** was not built. The
