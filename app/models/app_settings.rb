@@ -144,7 +144,7 @@ class AppSettings < RailsSettings::Base
   field :enable_auto_apply_relation_retype, default: false, type: :boolean
   # Dream State R1b: the entity types a project uses rather than owns (DependencyLikeTypes), a
   # comma-separated list matched by canonical type. Blank: none.
-  DEPENDENCY_LIKE_TYPES_DEFAULT = "Framework, Gem, Tool"
+  DEPENDENCY_LIKE_TYPES_DEFAULT = "Framework, Gem, Tool, SoftwareLibrary, TestFramework"
   field :dependency_like_types, default: DEPENDENCY_LIKE_TYPES_DEFAULT, type: :string
 
   # Default and accepted range of each numeric review setting.

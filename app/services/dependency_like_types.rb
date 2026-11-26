@@ -4,7 +4,7 @@
 # than owns, such as a framework, a gem or a tool. The list is the `dependency_like_types` setting
 # (Settings › Review policies), comma-separated. A type matches by its canonical type
 # (EntityTypeMapping, the vocabulary's aliases included), compared case-insensitively with the
-# listed types canonicalized the same way, so the default "Framework, Gem, Tool" also matches
+# listed types canonicalized the same way, so the default "Framework, Gem, Tool, SoftwareLibrary, TestFramework" also matches
 # `library`, `lib`, `rubygem` and `tools`. A Project never matches.
 #
 # Read the setting once per unit of work and keep the matcher (the read is uncached):

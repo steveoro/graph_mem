@@ -371,10 +371,13 @@ below were made in the session, on the plan's "R1b's kickoff decides".
   `depends_on` travels in the payload's `relations` (`GraphifyImporter::EDGE_RELATION_MAPPINGS`,
   `GraphifyImporter::Payload#referrers_index`). So the JSON import engine needs no change.
 - **The dependency-like types setting** is a comma-separated string, since Settings has no list type.
-  A type matches by its canonical type (`EntityTypeMapping`), case-insensitively. Its default covers
-  the vocabulary's Framework, Gem and Tool and their aliases. Before the release, a counts-only check
-  on production confirms that it covers the library-like entities measured there (23 in 4 types on
-  2026-11-26, 22 of them `part_of` a Project).
+  A type matches by its canonical type (`EntityTypeMapping`), case-insensitively. Its default started as
+  the vocabulary's Framework, Gem and Tool and their aliases. The counts-only check on production
+  (2026-11-26) found it covered 1 of the 4 library-like types there, 13 of the 23 entities and 13 of the
+  22 `part_of` a Project. Testing generic type names against the other three by count alone added
+  `SoftwareLibrary` (8 entities) and `TestFramework` (1). The default is now `Framework, Gem, Tool,
+  SoftwareLibrary, TestFramework`, which covers 22 of the 23. The one left is a loose name match, which
+  the operator can add in Settings.
 
 ## R1c. Removal-style evidence (with or right after R1b)
 

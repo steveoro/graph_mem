@@ -7,10 +7,11 @@ RSpec.describe DependencyLikeTypes do
   describe "the default list" do
     subject(:types) { described_class.current }
 
-    it "is Framework, Gem, Tool, matched with the vocabulary's aliases, case-insensitively" do
-      expect(AppSettings.dependency_like_types_list).to eq("Framework, Gem, Tool")
-      expect(types.types).to eq(%w[Framework Gem Tool])
-      %w[Framework framework frameworks lib library LIBRARY Gem gem gems rubygem Tool tool tools].each do |type|
+    it "is Framework, Gem, Tool, SoftwareLibrary, TestFramework, matched with the vocabulary's aliases, case-insensitively" do
+      expect(AppSettings.dependency_like_types_list).to eq("Framework, Gem, Tool, SoftwareLibrary, TestFramework")
+      expect(types.types).to eq(%w[Framework Gem Tool SoftwareLibrary TestFramework])
+      %w[Framework framework frameworks lib library LIBRARY Gem gem gems rubygem Tool tool tools SoftwareLibrary
+         softwarelibrary TestFramework].each do |type|
         expect(types.match?(type)).to be(true), type
       end
     end

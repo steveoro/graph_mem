@@ -15,7 +15,7 @@ RSpec.describe "Settings › Review policies › Dependency-like entity types", 
 
     expect(response).to have_http_status(:ok)
     field = Nokogiri::HTML(response.body).at_css("[data-testid='field-dependency_like_types']")
-    expect(field.at_css("input")["value"]).to eq("Framework, Gem, Tool")
+    expect(field.at_css("input")["value"]).to eq("Framework, Gem, Tool, SoftwareLibrary, TestFramework")
     expect(field.text).to include("Dependency-like entity types", "Project depends_on")
   end
 
@@ -26,7 +26,7 @@ RSpec.describe "Settings › Review policies › Dependency-like entity types", 
     expect(AppSettings.dependency_like_types_list).to eq("Gem, SynthPlugin")
     expect(DependencyLikeTypes.current.match?("synthplugin")).to be(true)
     log = AuditLog.find_by!(auditable_type: "AppSettings")
-    expect(log.changed_fields).to eq("dependency_like_types" => { "from" => "Framework, Gem, Tool", "to" => "Gem, SynthPlugin" })
+    expect(log.changed_fields).to eq("dependency_like_types" => { "from" => "Framework, Gem, Tool, SoftwareLibrary, TestFramework", "to" => "Gem, SynthPlugin" })
   end
 
   it "refuses an entry naming Project with 422 and saves nothing" do
@@ -34,7 +34,7 @@ RSpec.describe "Settings › Review policies › Dependency-like entity types", 
 
     expect(response).to have_http_status(:unprocessable_content)
     expect(response.body).to include("Dependency-like entity types not saved: Project")
-    expect(AppSettings.dependency_like_types_list).to eq("Framework, Gem, Tool")
+    expect(AppSettings.dependency_like_types_list).to eq("Framework, Gem, Tool, SoftwareLibrary, TestFramework")
   end
 
   it "accepts a blank list, which turns the R1b steps off" do
