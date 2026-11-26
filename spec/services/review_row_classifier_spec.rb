@@ -134,8 +134,9 @@ RSpec.describe ReviewRowClassifier do
   it "keeps the kind lists disjoint where they must be" do
     expect(described_class::SAFE_BULK_KINDS & described_class::DESTRUCTIVE_KINDS).to be_empty
     expect(described_class::SAFE_BULK_KINDS & described_class::CHOICE_KINDS).to be_empty
+    expect(described_class::INFORMATIONAL_KINDS & (described_class::SAFE_BULK_KINDS + described_class::CHOICE_KINDS)).to be_empty
     expect(described_class::RUN_CAPS).to eq("relationship_proposal" => 200, "entity_merge" => 100, "orphan_parent" => 100, "contradiction" => 100,
-                                               "fact_supersede" => 100)
+                                               "fact_supersede" => 100, "relation_review" => 100)
   end
 
   describe ".rank_key" do

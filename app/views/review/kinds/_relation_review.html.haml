@@ -1,0 +1,20 @@
+-# A relation_review row (Dream State R1c): a fact of a project says that an entity the Project still
+-# depends_on, or holds by part_of, was removed, replaced or dropped. Informational: Dismiss and Snooze
+-# only (CompactionReviewApplier::RelationReview). The relation and the fact are read live.
+- scope = "ui.review.relation_review"
+- evidence = payload["evidence"].is_a?(Hash) ? payload["evidence"] : {}
+- relation = MemoryRelation.find_by(id: payload["relation_id"].to_i)
+- names = MemoryEntity.where(id: [ payload["from_entity_id"], payload["to_entity_id"] ].compact.map(&:to_i)).pluck(:id, :name).to_h
+- from = names[payload["from_entity_id"].to_i] || payload["from_name"]
+- to = names[payload["to_entity_id"].to_i] || payload["to_name"]
+- part_of = payload["relation_type"] == RemovalEvidence::PART_OF
+%p{ data: { testid: "relation-review-summary" } }= t("#{scope}.summary", id: payload["relation_id"], from: from, type: payload["relation_type"], to: to,
+  project: part_of ? to : from, entity: part_of ? from : to)
+- if relation.nil?
+  %p.review-warning= t("#{scope}.gone")
+%h4= t("#{scope}.evidence")
+%ul{ data: { testid: "relation-review-evidence" } }
+  %li= t("#{scope}.fact", id: evidence["observation_id"], entity: evidence["entity_name"], excerpt: evidence["excerpt"])
+- unless MemoryObservation.active.exists?(id: evidence["observation_id"].to_i)
+  %p.review-warning= t("#{scope}.fact_inactive", id: evidence["observation_id"])
+%p.review-hint{ data: { testid: "relation-review-informational" } }= t("#{scope}.informational")

@@ -16,7 +16,8 @@ class CompactionReviewService
   EDIT_REFUSALS = {
     "contradiction" => "Contradiction rows can't be edited; choose which observation to keep",
     "fact_supersede" => "Outdated-by-fact rows can't be edited; supersede or retire when applying",
-    "relation_retype" => "Relation retype rows can't be edited; apply or dismiss them"
+    "relation_retype" => "Relation retype rows can't be edited; apply or dismiss them",
+    "relation_review" => "Relation review rows can't be edited; dismiss or snooze them"
   }.freeze
 
   extend ChangeRecording
@@ -51,6 +52,8 @@ class CompactionReviewService
     def apply(item_id, action_params = {}, report_type: "compaction_review", resolution: :obsolete)
       row = find_item(item_id, report_type: report_type)
       return { success: false, error: "Suggestion not found" } unless row
+      # An informational row (R1c's relation_review) is never applied: no lock, no write, no change set.
+      return CompactionReviewApplier.apply(row, action_params) if ReviewRowClassifier::INFORMATIONAL_KINDS.include?(row.kind)
 
       record_review("apply", row) { apply_row(row, action_params, resolution: resolution) }
     end
@@ -380,7 +383,7 @@ class CompactionReviewService
         validate_observation_id!(edits[:observation_id]) if edits[:observation_id].present?
       when "reparent_entity"
         validate_entity_ids!([ edits[:entity_id] || edits[:node_id], edits[:parent_id] ].compact)
-      when "contradiction", "fact_supersede", "relation_retype"
+      when "contradiction", "fact_supersede", "relation_retype", "relation_review"
         # An edit could point the row at other observations (or another relation, operation or
         # type); the choice is made at apply time, or the row is dismissed.
         record = MaintenanceReportRow.new

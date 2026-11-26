@@ -58,6 +58,14 @@ en:
         has_parent: "%{child} is already part_of %{parent}: choose to move it under this row's target, or to keep its parent."
         move: "Move under %{target}…"
         keep: "Keep %{parent}…"
+      relation_review:
+        informational_short: "Informational"
+        summary: "Relation #%{id}: '%{from}' %{type} '%{to}'. A fact of %{project} says '%{entity}' was removed, replaced or dropped."
+        gone: "The relation is gone (Dangling dismisses this row)."
+        evidence: "Evidence"
+        fact: "#%{id} on %{entity}: %{excerpt}"
+        fact_inactive: "Fact #%{id} is no longer active (Dangling dismisses this row)."
+        informational: "Informational: nothing is applied. Dismiss it if the relation still holds, or Snooze it. Ending a relation arrives with the relation lifecycle; remove the relation by hand if it is wrong."
       relation_retype_dependency:
         operation:
           swap: "Swap: part_of becomes the project's depends_on"

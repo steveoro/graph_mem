@@ -15,6 +15,9 @@ class DreamStateCompactor
   # blank setting has no candidates. Pause is checked after each batch. The run counts the rows it
   # seeded in "dependency_swaps_queued".
   #
+  # Once the swap pass is done ("dependency_pass" in the stats), the same job goes on with R1c's
+  # removal pass (RemovalEvidencePass), and the phase ends when that pass is done too.
+  #
   # The module also holds phase `orphans`' side of R1b (#queue_dependency_add): a dependency-like
   # orphan gets an "add" row ("dependency_adds_queued") instead of a parent.
   module DependencyEdgesPhase
@@ -26,6 +29,8 @@ class DreamStateCompactor
     # @return [Symbol] :continued, :paused or :completed (as #process_batch!)
     def process_dependency_edges_batch!
       stats = @run.stats || {}
+      return process_removal_batch! if stats["dependency_pass"] == RemovalEvidencePass::PASS
+
       cursor = stats["dependency_cursor_id"].to_i
       edges = dependency_candidates(cursor)
       edges.each { |relation| queue_swap(relation) }
@@ -34,8 +39,18 @@ class DreamStateCompactor
                         "dependency_edges_checked" => stats["dependency_edges_checked"].to_i + edges.size)
       broadcast_progress(PHASE, step: 0, message: "Checked #{edges.size} dependency-like part_of edge(s)") if edges.any?
 
-      return finish_dependency_edges! if edges.size < BATCH_SIZE
+      return start_removal_pass! if edges.size < BATCH_SIZE
 
+      pause_or_continue!
+    end
+
+    # The swap pass is done: R1c's removal pass starts in the same job.
+    def start_removal_pass!
+      @run.merge_stats!("dependency_pass" => RemovalEvidencePass::PASS)
+      process_removal_batch!
+    end
+
+    def pause_or_continue!
       if @run.reload.pause_requested?
         @run.pause!
         broadcast_operation(message: "Compaction paused")

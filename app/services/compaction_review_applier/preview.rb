@@ -157,6 +157,10 @@ class CompactionReviewApplier
       RelationRetype.preview(effective, params)
     end
 
+    def preview_relation_review(effective, _params)
+      RelationReview.preview(effective)
+    end
+
     def move_preview(node_id, parent_id)
       node = entity(node_id)
       parent = entity(parent_id)

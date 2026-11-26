@@ -3,7 +3,8 @@
 # Compacts the knowledge graph during dream-state background runs:
 # - Relation-types phase: canonicalize stored relation types (RelationTypesPhase, RelationTypeSweep)
 # - Dependency-edges phase: queue a relation_retype "swap" row for each dependency-like entity
-#   part_of a Project (DependencyEdgesPhase, R1b)
+#   part_of a Project (DependencyEdgesPhase, R1b), then an informational relation_review row for
+#   each removal fact about an entity a Project still depends_on or holds (RemovalEvidencePass, R1c)
 # - Orphan phase: auto-parent high-confidence matches, queue the rest; a dependency-like orphan
 #   gets an "add" row (Project depends_on it) instead (R1b)
 # - Tree-walk phase: dedupe identical observations, auto-merge very similar entities
@@ -14,6 +15,7 @@
 class DreamStateCompactor
   include RelationTypesPhase
   include DependencyEdgesPhase
+  include RemovalEvidencePass
 
   AUTO_MERGE_DISTANCE = 0.10
   REVIEW_MERGE_DISTANCE = 0.30
@@ -358,10 +360,11 @@ class DreamStateCompactor
     }
   end
 
-  # Run stats for the kinds the compactor queues, keyed by row kind; relation_retype rows by
-  # operation (R1b: "swap" from dependency_edges, "add" from orphans).
+  # Run stats for the kinds the compactor queues, keyed by row kind (R1c: relation_review from
+  # dependency_edges' removal pass); relation_retype rows by operation (R1b: "swap" from
+  # dependency_edges, "add" from orphans).
   QUEUED_STATS = { "entity_merge" => "merges_queued", "relationship_proposal" => "relationships_queued",
-                   "orphan_parent" => "orphans_queued" }.freeze
+                   "orphan_parent" => "orphans_queued", "relation_review" => "relation_reviews_queued" }.freeze
   QUEUED_RETYPE_STATS = { "swap" => "dependency_swaps_queued", "add" => "dependency_adds_queued" }.freeze
 
   # Seeds the buffered items; the *_queued stats count the rows actually seeded (after suppression,

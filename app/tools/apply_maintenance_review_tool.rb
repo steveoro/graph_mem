@@ -79,6 +79,9 @@ class ApplyMaintenanceReviewTool < ApplicationTool
     return result if result[:success]
 
     message = result[:error].to_s
+    # A refusal the applier marks as a validation error (R1c's informational relation_review row), with its own next move.
+    raise McpGraphMemErrors::InvalidArguments.new(message, next_move: result[:next_move]) if result[:validation]
+
     if message.match?(/not found/i)
       raise McpGraphMemErrors::ResourceNotFound.new(
         message,

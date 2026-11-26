@@ -52,11 +52,13 @@ module ReviewHelper
 
   # @param row [MaintenanceReportRow]
   # @param preview [Hash] CompactionReviewApplier.preview of the row
-  # @return [Boolean] the detail pane offers Apply…: not for a choice kind, nor for a lifecycle row
-  #   Repair refuses (a cross-entity superseded_by: Dismiss only), nor for a relation_retype row
-  #   whose child already has a parent (its card offers Move and Keep)
+  # @return [Boolean] the detail pane offers Apply…: not for a choice kind, nor for an informational
+  #   one (R1c's relation_review: Dismiss and Snooze only), nor for a lifecycle row Repair refuses (a
+  #   cross-entity superseded_by: Dismiss only), nor for a relation_retype row whose child already
+  #   has a parent (its card offers Move and Keep)
   def review_offers_apply?(row, preview)
     return false if ReviewRowClassifier::CHOICE_KINDS.include?(row.kind)
+    return false if ReviewRowClassifier::INFORMATIONAL_KINDS.include?(row.kind)
     # A relation_retype row whose child already has a parent offers Move / Keep on its card instead.
     return false if row.kind == "relation_retype" && CompactionReviewApplier::RelationRetype.choice_parent_id(row.effective_payload)
 
@@ -101,6 +103,7 @@ module ReviewHelper
     when "delete_entity" then "Delete #{payload['entity_name'].presence || "entity ##{payload['entity_id']}"}"
     when "delete_relation" then "Delete relation ##{payload['relation_id']}"
     when "relation_retype" then relation_retype_title(payload)
+    when "relation_review" then "#{payload['from_name'] || "##{payload['from_entity_id']}"} #{payload['relation_type']} #{payload['to_name'] || "##{payload['to_entity_id']}"}: removal fact ##{payload.dig('evidence', 'observation_id')}"
     when "lifecycle_corruption" then "Observation ##{payload['observation_id']}: #{payload['issue']}"
     else payload["entity_name"].presence || payload["reason"].presence || row.group_key.to_s
     end.to_s.truncate(140)

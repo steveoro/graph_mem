@@ -85,6 +85,7 @@ class ReviewGroupActions
       return nil unless op == "apply"
       return "snoozed: restore it first" unless row.active?
       return "choose a side per row" if ReviewRowClassifier::CHOICE_KINDS.include?(row.kind)
+      return "informational: dismiss or snooze it" if ReviewRowClassifier::INFORMATIONAL_KINDS.include?(row.kind)
       return "destructive: apply one by one" unless ReviewRowClassifier::SAFE_BULK_KINDS.include?(row.kind)
       return "below confidence #{min_confidence}" if min_confidence && row.confidence.to_f < min_confidence.to_f
 
