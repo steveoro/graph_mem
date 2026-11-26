@@ -38,18 +38,30 @@ RSpec.describe DreamStateCompactor::RemovalEvidencePass do
     expect(MemoryRelation.exists?(uses.id)).to be(true)
   end
 
-  it "reads a direct part_of of the Project too, and quotes a cut excerpt of a long fact" do
-    widget = fs_member!(app, "SynthWidget", "Component")
-    fact = fs_observe!(widget, "SynthWidget was removed from the dashboard. #{'Detail ' * 60}")
+  it "reads a dependency-like entity's part_of the Project too, and quotes a cut excerpt of a long fact" do
+    tool = fs_member!(app, "SynthCli", "Tool") # a library not swapped yet
+    fact = fs_observe!(app, "SynthCli was removed from the build. #{'Detail ' * 60}")
 
     DreamStateCompactor.new(run: phase_run).process_batch!
 
     row = review_rows.sole
-    part_of = MemoryRelation.find_by!(from_entity_id: widget.id, relation_type: "part_of")
-    expect(row.payload).to include("relation_id" => part_of.id, "relation_type" => "part_of", "from_name" => "SynthWidget", "to_name" => "SynthApp")
+    part_of = MemoryRelation.find_by!(from_entity_id: tool.id, relation_type: "part_of")
+    expect(row.payload).to include("relation_id" => part_of.id, "relation_type" => "part_of", "from_name" => "SynthCli", "to_name" => "SynthApp")
     expect(row.payload["evidence"]["excerpt"]).to eq(fact.content.squish.truncate(RemovalEvidence::EXCERPT_LIMIT))
     expect(row.payload["reason"]).to end_with("but 'SynthApp' still holds it by part_of")
-    expect(row.anchor_entity_id).to eq(widget.id)
+    expect(row.anchor_entity_id).to eq(tool.id)
+  end
+
+  it "queues nothing for an ordinary member's part_of, whatever its facts say" do
+    widget = fs_member!(app, "SynthWidget", "Component")
+    fs_observe!(widget, "SynthWidget was removed from the dashboard.")
+    fs_observe!(app, "SynthApp dropped SynthWidget.")
+    run = phase_run
+
+    DreamStateCompactor.new(run: run).process_batch!
+
+    expect(review_rows).to be_empty
+    expect(run.reload.stats).to include("removal_edges_checked" => 1) # the depends_on only
   end
 
   it "never queues a row again while it is pending, or after it was dismissed; a new fact gets its own row" do

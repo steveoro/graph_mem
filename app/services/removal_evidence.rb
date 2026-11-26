@@ -4,13 +4,16 @@
 # depends_on, or still holds by a direct part_of, was removed, replaced or dropped. Deterministic,
 # bounded, no LLM.
 #
-# - The edges: a Project root's outgoing `depends_on`, and a `part_of` into a Project root (its direct
-#   children). A deeper member's part_of is not read.
+# - The edges: a Project root's outgoing `depends_on`, and a `part_of` into a Project root from an
+#   entity of a dependency-like type (DependencyLikeTypes: a library not swapped yet). An ordinary
+#   member's part_of is not read: its own facts say "removed" or "dropped" about other things (a
+#   change note), and R1's aim is an outdated library. A blank setting reads no part_of edge.
 # - The facts: the active facts of the project, those held by its root or by a member (project_id),
 #   that name the entity (held by it, its keyword path holds its name, or its text names it,
 #   EntityTerms) and match REMOVAL_PATTERN. A global library's own facts are not the project's.
 #
-#   RemovalEvidence.edges(after_id: 0, limit: 200) # => [#<MemoryRelation SynthApp depends_on SynthLib>, ...]
+#   RemovalEvidence.edges(after_id: 0, limit: 200, types: DependencyLikeTypes.current)
+#   # => [#<MemoryRelation SynthApp depends_on SynthLib>, ...]
 #   RemovalEvidence.facts(relation)                # => [#<MemoryObservation "SynthApp replaced SynthLib with SynthParser.">]
 module RemovalEvidence
   # The removal phrases (a constant list, shown in docs/dream_state.md), matched case-insensitively
@@ -37,14 +40,20 @@ module RemovalEvidence
 
   module_function
 
-  # The candidate edges after `after_id`, by id: a Project root's depends_on, or a part_of into one.
+  # The candidate edges after `after_id`, by id: a Project root's depends_on, or a part_of into one
+  # from a dependency-like entity.
   # @param after_id [Integer] the cursor (a relation id)
   # @param limit [Integer]
+  # @param types [DependencyLikeTypes] the setting, read once by the caller
   # @return [Array<MemoryRelation>] with both ends loaded
-  def edges(after_id:, limit:)
+  def edges(after_id:, limit:, types: DependencyLikeTypes.current)
     roots = MemoryEntity.where(entity_type: NodeOperationsStrategy::PROJECT_ENTITY_TYPE, project_id: nil).select(:id)
-    MemoryRelation.where(relation_type: PART_OF, to_entity_id: roots).or(MemoryRelation.where(relation_type: DEPENDS_ON, from_entity_id: roots))
-                  .where("memory_relations.id > ?", after_id).includes(:from_entity, :to_entity).order(:id).limit(limit).to_a
+    scope = MemoryRelation.where(relation_type: DEPENDS_ON, from_entity_id: roots)
+    if types.stored_types.any?
+      libraries = MemoryEntity.where(entity_type: types.stored_types).select(:id)
+      scope = scope.or(MemoryRelation.where(relation_type: PART_OF, to_entity_id: roots, from_entity_id: libraries))
+    end
+    scope.where("memory_relations.id > ?", after_id).includes(:from_entity, :to_entity).order(:id).limit(limit).to_a
   end
 
   # @param relation [MemoryRelation] an edge from .edges

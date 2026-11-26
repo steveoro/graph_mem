@@ -448,8 +448,8 @@ with the fact as evidence. In R1 the row is **informational**: it can be dismiss
 lifecycle; remove the relation by hand if it is wrong"). R2 gives it its apply. Only 2 library-like
 entities are named in such a fact today, so this is small.
 
-**As built (1.95.0, with R1b-2).** The calls below were made in the session, on the kickoff's spec;
-none is Steve's.
+**As built (1.95.0, with R1b-2).** The calls below were made in the session, on the kickoff's spec
+(the edges' type filter is the lead's); none is Steve's.
 
 - **Where.** A second pass of phase `dependency_edges` (`DreamStateCompactor::RemovalEvidencePass`),
   not a new phase: it reads the same kind of edges (a Project and what it uses) and the same project
@@ -458,9 +458,16 @@ none is Steve's.
   becomes `removal` and the same job runs the first removal batch; the phase ends after it. 200 edges
   per job, its cursor in `stats["removal_cursor_id"]`, pause after each batch, no membership lock, no
   LLM.
-- **Edges.** A Project root's outgoing `depends_on` and every `part_of` into a Project root (its direct
-  children, any type). "Holds by `part_of`" was read as the Project's own edge, so a deeper member's
-  `part_of` and a member's own `depends_on` are not read.
+- **Edges.** A Project root's outgoing `depends_on`, and a `part_of` into a Project root only from an
+  entity of a dependency-like type (`DependencyLikeTypes`; a blank setting reads none). "Holds by
+  `part_of`" was read as the Project's own edge, so a deeper member's `part_of` and a member's own
+  `depends_on` are not read. The type filter is the lead's call after a counts-only estimate on
+  production (2026-11-26, replicating the edges, the candidate query and the pattern): the 431
+  `part_of` edges from ordinary direct children gave 39 edges with a hit and 58 (edge, fact) pairs, 57
+  of them facts held by the child itself that say "removed …" or "dropped …" about something else (a
+  component's change note), so noise; the 21 from dependency-like children gave 1 edge and 6 pairs,
+  none held by the entity. R1's aim is an outdated library through a past relation, so an ordinary
+  member's `part_of` is out of scope.
 - **Facts.** The project's active facts (root and members, as R1b's evidence reads them) that name the
   entity by its keyword path or by its text, and match `RemovalEvidence::PHRASES` ("removed",
   "replaced … by", "replaced … with" with up to three words for "…", "dropped", "no longer uses",

@@ -8,28 +8,37 @@ RSpec.describe RemovalEvidence do
   let!(:library) { MemoryEntity.create!(name: "SynthLib", entity_type: "Gem") }
   let!(:uses) { MemoryRelation.create!(from_entity: app, to_entity: library, relation_type: "depends_on") }
   let!(:widget) { fs_member!(app, "SynthWidget", "Component") }
-  let(:held) { MemoryRelation.find_by!(from_entity_id: widget.id, relation_type: "part_of") }
+  let!(:tool) { fs_member!(app, "SynthCli", "Tool") } # a library not swapped yet
+  let(:held) { MemoryRelation.find_by!(from_entity_id: tool.id, relation_type: "part_of") }
+
+  def part_of(entity) = MemoryRelation.find_by!(from_entity_id: entity.id, relation_type: "part_of")
 
   describe ".edges" do
-    it "reads a Project root's depends_on and the part_of edges into it, by id, after the cursor" do
-      deep = fs_member!(widget, "SynthWidget Helper", "Component")
+    it "reads a Project root's depends_on and the part_of edges into it from dependency-like entities, by id, after the cursor" do
+      deep = fs_member!(tool, "SynthCli Helper", "Tool")
       MemoryRelation.create!(from_entity: widget, to_entity: library, relation_type: "depends_on")
       other = fs_project!("OtherPrj")
       nested = fs_member!(other, "SynthSubPrj", "Project")
       MemoryRelation.create!(from_entity: nested, to_entity: library, relation_type: "depends_on") # a nested Project is no root
-      nested_part_of = MemoryRelation.find_by!(from_entity_id: nested.id, relation_type: "part_of")
+      gem = fs_member!(other, "SynthGem", "rubygem") # dependency-like by its canonical type
 
       edges = described_class.edges(after_id: 0, limit: 50)
 
-      expect(edges.map(&:id)).to eq([ uses.id, held.id, nested_part_of.id ])
-      expect(edges.map(&:id)).not_to include(MemoryRelation.find_by!(from_entity_id: deep.id).id)
-      expect(described_class.edges(after_id: uses.id, limit: 50).map(&:id)).to eq([ held.id, nested_part_of.id ])
+      expect(edges.map(&:id)).to eq([ uses.id, held.id, part_of(gem).id ])
+      expect(edges.map(&:id)).not_to include(part_of(widget).id, part_of(deep).id, part_of(nested).id)
+      expect(described_class.edges(after_id: uses.id, limit: 50).map(&:id)).to eq([ held.id, part_of(gem).id ])
       expect(described_class.edges(after_id: 0, limit: 1).map(&:id)).to eq([ uses.id ])
+    end
+
+    it "reads no part_of edge when the dependency-like types setting is blank, and follows a changed list" do
+      expect(described_class.edges(after_id: 0, limit: 50, types: DependencyLikeTypes.new("")).map(&:id)).to eq([ uses.id ])
+      expect(described_class.edges(after_id: 0, limit: 50, types: DependencyLikeTypes.new("Component")).map(&:id))
+        .to eq([ uses.id, part_of(widget).id ])
     end
 
     it "gives the Project and the entity of each edge" do
       expect(described_class.ends(uses)).to eq([ app, library ])
-      expect(described_class.ends(held)).to eq([ app, widget ])
+      expect(described_class.ends(held)).to eq([ app, tool ])
     end
   end
 
@@ -62,8 +71,8 @@ RSpec.describe RemovalEvidence do
       expect(described_class.facts(uses)).to be_empty
     end
 
-    it "counts a held member's own facts, since it is the project's" do
-      fact = fs_observe!(widget, "SynthWidget was removed from the dashboard.")
+    it "counts a held library's own facts, since it is the project's" do
+      fact = fs_observe!(tool, "SynthCli was removed from the build.")
 
       expect(described_class.facts(held)).to eq([ fact ])
     end

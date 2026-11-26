@@ -3,8 +3,8 @@
 class DreamStateCompactor
   # The second pass of phase `dependency_edges` (Dream State R1c), once the swap pass is done: queues
   # an informational `relation_review` row when a fact of a project says that an entity the Project
-  # still depends_on, or holds by a direct part_of, was removed, replaced or dropped
-  # (RemovalEvidence, deterministic, no LLM). It reads the same edges as the swap pass (a Project's
+  # still depends_on, or holds by a direct part_of (a dependency-like entity only), was removed,
+  # replaced or dropped (RemovalEvidence, deterministic, no LLM). It reads the same edges as the swap pass (a Project's
   # dependencies) and the same project facts as the swap's evidence, so it shares its phase rather
   # than adding one.
   #
@@ -25,7 +25,7 @@ class DreamStateCompactor
     def process_removal_batch!
       stats = @run.stats || {}
       cursor = stats["removal_cursor_id"].to_i
-      edges = RemovalEvidence.edges(after_id: cursor, limit: BATCH_SIZE)
+      edges = RemovalEvidence.edges(after_id: cursor, limit: BATCH_SIZE, types: dependency_types)
       edges.each { |relation| queue_relation_reviews(relation) }
       flush_review_queue!
       @run.merge_stats!("removal_cursor_id" => edges.last&.id || cursor,
