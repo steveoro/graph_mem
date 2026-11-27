@@ -1,7 +1,13 @@
 require "active_support/core_ext/integer/time"
+require_relative "../../lib/graph_mem/generated_secret_key"
 
 Rails.application.configure do
   # Settings specified here will take precedence over those in config/application.rb.
+
+  # A container with neither SECRET_KEY_BASE nor a master key uses the key bin/docker-entrypoint
+  # generated in the storage volume, also in processes that skip the entrypoint (docker compose
+  # exec). An empty SECRET_KEY_BASE counts as unset (#206).
+  GraphMem::GeneratedSecretKey.apply(config)
 
   # Code is not reloaded between requests.
   config.enable_reloading = false

@@ -6,8 +6,91 @@ if [ -z "${LD_PRELOAD+x}" ]; then
     export LD_PRELOAD
 fi
 
+# A secret_key_base generated on first boot lives here: storage/ is the graph_mem_storage volume, so
+# the key survives rebuilds and `docker compose down`. Keep in step with
+# GraphMem::GeneratedSecretKey::PATH, which reads the same file for processes that skip this
+# entrypoint (docker compose exec).
+GENERATED_KEY_FILE=storage/secret_key_base
+
+# secret_key_base without a master key (#206). With SECRET_KEY_BASE or a master key set this changes
+# nothing: Rails takes SECRET_KEY_BASE, or the credentials' secret_key_base, as before. The key is
+# never printed.
+prepare_secret_key_base() {
+  if [ -n "${SECRET_KEY_BASE:-}" ] || [ -n "${RAILS_MASTER_KEY:-}" ] || [ -f config/master.key ]; then
+    return 0
+  fi
+
+  local key=""
+  [ ! -f "$GENERATED_KEY_FILE" ] || key=$(cat "$GENERATED_KEY_FILE")
+  # A key written here is one line of 128 hex characters. Anything else (empty, blank, truncated)
+  # is replaced, since GeneratedSecretKey ignores such a file too: exporting it would hand Rails an
+  # empty or different key.
+  if [[ ! $key =~ ^[0-9a-f]{128}$ ]]; then
+    # umask 077 creates the file 0600; a stale temp file (or a symlink there) would keep its own
+    # mode, so it goes first. Written to a temp file and renamed, so a failed write never leaves a
+    # partial key behind.
+    rm -f "$GENERATED_KEY_FILE.tmp"
+    (umask 077 && ruby -rsecurerandom -e 'puts SecureRandom.hex(64)' >"$GENERATED_KEY_FILE.tmp")
+    mv "$GENERATED_KEY_FILE.tmp" "$GENERATED_KEY_FILE"
+    key=$(cat "$GENERATED_KEY_FILE")
+    echo "secret_key_base: generated and kept in the storage volume (set SECRET_KEY_BASE in .env to choose your own)"
+  fi
+  SECRET_KEY_BASE=$key
+  export SECRET_KEY_BASE
+}
+
+# A configuration error that booting can't fix: print one line with the fix and stop. The container
+# restarts (restart: unless-stopped) and every restart logs the same line, not a stack trace.
+fail() {
+  echo "$*" >&2
+  exit 1
+}
+
+# Decrypts config/credentials.yml.enc with RAILS_MASTER_KEY without booting the app: a boot would die
+# on the same error with a stack trace. Exits 3 when the key doesn't fit the file (a wrong key, or
+# one of the wrong length); any other error is left for Rails to report. Only the exit status
+# counts, so stderr is discarded: Bundler or RubyGems may print warnings there (CircleCI's do),
+# which would bury the one-line fix.
+check_master_key() {
+  bundle exec ruby -e '
+    require "active_support"
+    require "active_support/encrypted_configuration"
+    begin
+      ActiveSupport::EncryptedConfiguration.new(
+        config_path: "config/credentials.yml.enc", key_path: "config/master.key",
+        env_key: "RAILS_MASTER_KEY", raise_if_missing_key: false
+      ).read
+    rescue ActiveSupport::MessageEncryptor::InvalidMessage, ArgumentError
+      exit 3
+    end' 2>/dev/null
+}
+
+check_configuration() {
+  [ -f config/database.yml ] ||
+    fail "config/database.yml is missing: cp config/database.example.yml config/database.yml, then docker compose down && bin/up --build (docs/troubleshooting.md)"
+
+  [ -n "${RAILS_MASTER_KEY:-}" ] || return 0
+  if [ -f config/credentials.yml.enc ]; then
+    local status=0
+    check_master_key || status=$?
+    [ "$status" -ne 3 ] ||
+      fail "RAILS_MASTER_KEY doesn't match config/credentials.yml.enc: fix the key in .env, or remove the key and the file to boot without credentials (docs/quick_setup.md)"
+  elif [ -z "${SECRET_KEY_BASE:-}" ]; then
+    # Rails would stop on "Missing secret_key_base": the key has no file to give it one.
+    fail "RAILS_MASTER_KEY is set but config/credentials.yml.enc is missing: put the file back in config/ and rebuild, or remove RAILS_MASTER_KEY from .env to boot without credentials (docs/quick_setup.md)"
+  fi
+}
+
+preflight() {
+  # compose passes SECRET_KEY_BASE="" when .env has none, and Rails would take "" as an invalid key.
+  [ -n "${SECRET_KEY_BASE:-}" ] || unset SECRET_KEY_BASE
+  check_configuration
+  prepare_secret_key_base
+}
+
 # If running the rails server then create or migrate existing database
 if [ "$1" == "./bin/rails" ] && [ "$2" == "server" ]; then
+  preflight
   ./bin/rails db:prepare
   ./bin/rails db:support:initialize
 fi

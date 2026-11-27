@@ -14,41 +14,40 @@ host: the app container uses host networking.
 git clone https://github.com/steveoro/graph_mem.git ~/Projects/graph_mem
 cd ~/Projects/graph_mem
 cp .env.example .env
-cp config/database.example.yml config/database.yml
 ollama pull nomic-embed-text
 ```
 
-Edit `.env` and set (you'll add `RAILS_MASTER_KEY` in the next step):
+Edit `.env` and set:
 
 | Variable | Value |
 |---|---|
 | `DB_PASSWORD` | Any password for the MariaDB container. |
 | `OPERATOR_PASSWORD` | Your password for the web UI. Add the line: the operator login stays disabled while the password is the default `changeme`. |
 | `DB_BACKUP_HOST_PATH` | An existing folder for database backups, e.g. `/home/<you>/backups/graph_mem`. |
+| `SECRET_KEY_BASE` | Optional: your own key, from `openssl rand -hex 64`. Without it, graph_mem generates one on first boot and keeps it in the `storage` volume. |
 
-Leave everything else as it is. The copied `config/database.yml` needs no edits: the container
-gets its main database URL from `.env`, and the cache, queue and cable databases are SQLite files
-in the `storage` volume. The file is git-ignored, so a fresh clone doesn't have it: without it the
-image has no `cable` database and the app container restarts in a loop.
+Leave everything else as it is. You need no master key: the app needs only a `secret_key_base`,
+and the operator login comes from `.env`. You need no `config/database.yml` either: the image uses
+`config/database.example.yml` when there is none. The container gets its main database URL from
+`.env`, and the cache, queue and cable databases are SQLite files in the `storage` volume. To edit
+the file, copy it first (`cp config/database.example.yml config/database.yml`, git-ignored).
 
-## 2. Generate your own master key
+## 2. Optional: your own Rails credentials
 
-Every developer generates their own key; nobody needs to share one. The key encrypts
-`config/credentials.yml.enc`, and the app needs only a `secret_key_base` from that file (the
-operator login comes from `.env`), so a fresh one works just as well. Build the image, then let Rails create a new key and credentials file
-inside it (no Ruby needed on the host):
+Skip this step unless you want settings in an encrypted `config/credentials.yml.enc` (for example
+`operator.password` instead of `OPERATOR_PASSWORD`). Every developer makes their own key and file;
+nobody shares one, and both are git-ignored. Build the image, then let Rails create them inside it
+(no Ruby needed on the host):
 
 ```bash
 docker compose build app
-rm config/credentials.yml.enc          # git keeps the shared one
 docker run --rm --user "$(id -u):$(id -g)" --entrypoint "" -e RAILS_ENV=production -e EDITOR=true \
   -v "$PWD/config:/rails/config" graph_mem-app bin/rails credentials:edit
 echo "RAILS_MASTER_KEY=$(cat config/master.key)" >> .env
 ```
 
-`sh: git: not found` in the output is harmless. The command writes `config/master.key`
-(git-ignored) and a new `config/credentials.yml.enc`, so `git status` shows that file as
-modified: keep it local and never commit it. Back up `config/master.key`: without it, your
+`sh: git: not found` in the output is harmless. The credentials' `secret_key_base` is used from
+then on, unless `.env` sets `SECRET_KEY_BASE`. Back up `config/master.key`: without it, your
 credentials file can't be decrypted.
 
 ## 3. Start the container
@@ -170,8 +169,9 @@ context to that project (it creates the Project entity if needed).
 
 | Symptom | Fix |
 |---|---|
-| App container keeps restarting; `docker compose logs app` says ``The `cable` database is not configured`` | `config/database.yml` is missing: `cp config/database.example.yml config/database.yml`, then `docker compose down && bin/up --build`. |
-| App container keeps restarting; `docker compose logs app` mentions the master key or `secret_key_base` | `RAILS_MASTER_KEY` in `.env` doesn't match `config/credentials.yml.enc`: redo step 2. |
+| App container keeps restarting; `docker compose logs app` says ``The `cable` database is not configured`` (an image built from an older checkout) or `config/database.yml is missing` | `cp config/database.example.yml config/database.yml`, then `docker compose down && bin/up --build`. |
+| App container keeps restarting; `docker compose logs app` says `RAILS_MASTER_KEY doesn't match config/credentials.yml.enc` | The key in `.env` didn't encrypt that file. Fix the key, or remove `RAILS_MASTER_KEY` from `.env` to boot without credentials (the file can stay, or move it out of `config/`). Then `docker compose down && bin/up --build`. |
+| App container keeps restarting; `docker compose logs app` says `RAILS_MASTER_KEY is set but config/credentials.yml.enc is missing` | The file is no longer tracked, so a `git pull` removed it: copy your backup back into `config/`, or remove `RAILS_MASTER_KEY` from `.env`. Then `docker compose down && bin/up --build`. |
 | Operator login returns 503 | Set `OPERATOR_PASSWORD` in `.env`, then `docker compose down && bin/up`. |
 | `embeddings:check` fails | Ollama isn't running, or `nomic-embed-text` isn't pulled. |
 | Agent gets 403 from `/mcp` | It connects from another machine or through a host name not on the allowlist: see [MCP access control](mcp_access_control.md). |
