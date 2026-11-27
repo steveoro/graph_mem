@@ -3,8 +3,9 @@
 > Status: draft, 2026-11-20, written on `main` at 1.92.0. Revised the same day after Steve's
 > answers and two review rounds (see "Answers" at the end). **R1a shipped as 1.93.0** (see its
 > "As built" note). **R1b and R1c shipped together as 1.96.0** (R1b-1, #204, and R1b-2; see the
-> "Kickoff" and "As built (1.96.0)" notes under R1b and the "As built" note under R1c). R2 onward is not
-> started. Each PR below gets its own kickoff.
+> "Kickoff" and "As built (1.96.0)" notes under R1b and the "As built" note under R1c). **R2 has its plan**,
+> [`relation-lifecycle-plan.md`](relation-lifecycle-plan.md) (draft, 2026-11-27); R3 onward is not started. Each PR
+> below gets its own kickoff.
 >
 > **Versions (2026-11-27):** 1.95.0 went to the first-run setup (#206, #207, its own plan), released
 > while R1b was in review, so R1b and R1c moved to **1.96.0** and R2 to **1.97.0**.
@@ -124,7 +125,7 @@ The versions, as expected today (each kickoff confirms its own against `version.
 | SQL exchange | (its own plan, five PRs incl. the JSON export's retirement: `done/sql-exchange-plan.md`) | after mcp 1.11.0 (shipped) | 1.94.0 |
 | **R1b** | Retype library `part_of` edges, the orphan rule, the scans, the SQL export's scope, dream-state actor on its edges (two PRs, R1b-1 and R1b-2; see its "Kickoff" note) | after the SQL exchange train (shipped) | 1.96.0 |
 | **R1c** | Removal-style evidence rows | with R1b, in R1b-2 (shipped) | 1.96.0 |
-| **R2** | Relation lifecycle | after R1 | 1.97.0 |
+| **R2** | Relation lifecycle (`relation-lifecycle-plan.md`, two PRs) | after R1 | 1.97.0 |
 
 Each PR has its own kickoff, the usual ~3,000-line stop and push-and-continue checkpoints. R1a is
 about the size of 1.92.0; R1b is smaller in code but touches membership-adjacent paths.
@@ -158,7 +159,8 @@ Dependencies between the plans:
   translation writes any. `docs/dream_state.md` described `depends_on` as running "from children to
   parents" in the tree walk; the dream-state tree walk follows `part_of` only (R1a corrected that
   sentence).
-- R2 changes `memory_relations`, so it bumps the SQL exchange script format version.
+- R2 changes `memory_relations`, so it bumps the SQL exchange script format version (graph_mem-sql v2; see
+  `relation-lifecycle-plan.md`, item 8).
 
 ## R1a. Relation vocabulary (no migration; one stored-value change, approved)
 
@@ -256,16 +258,18 @@ Dependencies between the plans:
   (`"retype"`), `relation_id`, `from_entity_id`, `from_name`, `to_entity_id`, `to_name`, `old_type`,
   `new_type`, `reason`.
 
-**Done when** (re-measured on production after the first sweep, counts only; **not done yet**: the
-re-measurement waits for the release to be deployed and the first sweep to run, so the table below
-still shows the targets only):
+**Done when** (re-measured on production on 2026-11-27, after the sweeps ran there, counts only): **done.**
 
-| Measure | Before | Target |
-|---|---|---|
-| Relations with a mapped or trivially normalizable variant type | 56 | 0 |
-| Case-only variants | 3 | 0 |
-| Relations outside the vocabulary | 239 | 183 or fewer, each of their types either accepted or awaiting the operator on the page |
-| Relations lost | — | 0 (merges into a twin are counted and listed) |
+| Measure | Before | Target | 2026-11-27 |
+|---|---|---|---|
+| Relations with a mapped or trivially normalizable variant type | 56 | 0 | **0** |
+| Case-only variants | 3 | 0 | **0** |
+| Relations outside the vocabulary | 239 | 183 or fewer, each of their types either accepted or awaiting the operator on the page | **183** (94 types), all awaiting the operator on the page; none accepted yet |
+| Relations lost | — | 0 (merges into a twin are counted and listed) | **0** |
+
+- **The sweep's reports.** The five `relation_type_sweep` reports on production count retyped 98,
+  case_only 29, queued 6 (all six approved), merged 0, error 0.
+- **Relations in all:** 844 (848 at plan time). The difference is other writes, not the sweep.
 
 ## R1b. Libraries: `depends_on`, global scope, and the orphan rule (after the SQL exchange)
 
@@ -443,6 +447,10 @@ sessions.
   scenario spec, `SqlExport::Scope`'s spec). The production re-measure (library-like entities under
   `part_of` a Project, orphans, dream-state edges by actor) waits for the release to be deployed and
   the swaps to be applied.
+  - **Baseline** (production, 2026-11-27, counts only, still on 1.95.0): 22 dependency-like entities, 21
+    of them `part_of` a Project root; 26 orphans. Production hasn't been rebuilt on 1.96.x yet, so no swap
+    has been queued or applied there. The re-measure follows the 1.96.x deploy (see
+    [`relation-lifecycle-plan.md`](relation-lifecycle-plan.md), "Measure before the kickoff").
 
 ## R1c. Removal-style evidence (with or right after R1b)
 
@@ -501,25 +509,23 @@ entities are named in such a fact today, so this is small.
 
 ## R2. A lifecycle for relations (migration; MCP output change, needs Steve's approval)
 
+**Planned in [`relation-lifecycle-plan.md`](relation-lifecycle-plan.md)** (draft, 2026-11-27, on 1.96.1):
+the schema, every reader of relations, the MCP surface with its changes listed for Steve's approval, the
+`relation_review` apply, graph_mem-sql v2, undo, two PRs for 1.97.0, and eight questions for Steve.
+
+The outline it started from:
+
 - `memory_relations` gains `status` (active / ended), `ended_at`, `ended_reason`, and optionally
   `valid_from` / `valid_until`, mirroring observations.
 - An ended relation is kept and audited, hidden from default traversal and search, and shown on
-  request (`include_ended` on `traverse_graph` / `get_entities`): "SynthLib: used by SynthApp
-  until …". This is what finally keeps an outdated library out of a project's results.
+  request: "SynthLib: used by SynthApp until …". This is what finally keeps an outdated library out of
+  a project's results.
 - R1c's `relation_review` rows get their apply: end the relation, with the removal fact as the reason.
 - Deleting stays available by hand only.
 
-Questions the R2 plan must answer before a kickoff:
-
-- the surface: the new parameter, the extra keys on relation payloads, whether `graph_edit` may end
-  a relation;
-- the unique key (from, to, type) also covers ended rows: does re-adding an ended edge reactivate
-  it, or is it refused?
-- an ended `part_of`: does it still count for membership, the single-parent check, orphans and
-  `ProjectSubtree`? (`project_id` would follow.)
-- which other readers hide ended edges: `find_shortest_path`, `get_context`, graph stats, the SQL
-  export, Explore;
-- the SQL exchange script format version, bumped by the migration.
+The questions this section left for the R2 plan (the surface, re-adding an ended edge, an ended
+`part_of` and membership, which readers hide ended edges, the SQL exchange's format version) are its
+items 6, 5, 3, 4 and 8.
 
 ## R3. Discovery by traversal (idea 5), each rule behind a measured approval rate
 
