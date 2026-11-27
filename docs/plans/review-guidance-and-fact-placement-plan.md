@@ -58,10 +58,15 @@ What they say:
   - the buttons that kind cards render themselves:
     - "Outdated by a fact": Supersede… and Retire…;
     - `relation_retype`: Move and Keep;
-    - contradiction: Choose a side, and "Both are right", which is Dismiss there;
-  - the preview card (`_preview_card.html.haml`).
+    - contradiction: Keep this (one per side), and "Both are right", which is Dismiss there;
+  - the preview cards' confirm writes: Apply on `_preview_card.html.haml`, and Supersede / Retire on
+    `_fact_supersede_apply.html.haml`. They need their own key, `ui.review.actions.<kind>.confirm`,
+    because the "Apply…" caption describes the preview step, not the write;
+  - the group cards' bulk actions: Apply high-confidence, Dismiss all and Snooze 30 days on
+    `_group_card.html.haml`, and the confirm on `_group_preview_card.html.haml`.
 
-  The list rows (`_row.html.haml`) stay one line. They get the same text as a `title` only.
+  The list rows (`_row.html.haml`) stay one line. They get the same text as a `title` only. Their
+  contradiction link, "Choose a side", opens the card.
 - **What:** one short line per action and kind, under the buttons, saying what happens. It is visible
   text, not a hover tooltip: tooltips are easy to miss and don't work on touch. Each caption is tied to
   its button with `aria-describedby`.
@@ -76,8 +81,12 @@ What they say:
   - **Both are right** (contradiction): "Both facts stay; the pair isn't flagged again."
   - **Apply…** (default): "Shows what applying changes before anything is written."
   - **Restore:** "Brings the suggestion back as pending."
-- **Spec:** every action button rendered for every kind in `ReviewRowClassifier` has a caption: a
-  kind-specific key, or the action's default.
+- **Spec:** every action button has a caption, either a kind-specific key or the action's default. It
+  covers:
+  - each kind's detail and preview cards (including the confirm writes);
+  - the group cards.
+
+  So a later button can't ship without one.
 
 ## 2. A hint when a guard fires
 
@@ -85,9 +94,15 @@ What they say:
   (`app/views/review/kinds/_fact_supersede.html.haml`).
 - **What:** "The guard disagrees with the judge: this fact names a version, an environment or a work log
   that the source fact doesn't. Old isn't wrong, so Dismiss unless the source fact really replaces it."
-  The `keep` guard needs no hint: such rows are never proposed.
+  - **Wording:** it uses the card's own label for the left side. On a contradiction-fallback row (origin
+    `FactSupersede::ContradictionFallback::ORIGIN`), that side is a "Newer observation", not a source
+    fact.
+  - **The `keep` guard** needs no hint: such rows are never proposed.
 - **Also:** the same hint goes in front of the judge's suggested replacement when a guard fired, since a
-  replacement written across a guard is the likeliest to be nonsense.
+  replacement written across a guard is the likeliest to be nonsense. It shows in two places:
+  - on the card's "Suggested replacement" line;
+  - above the preview's pre-filled textarea (`_fact_supersede_apply.html.haml`), where the replacement
+    actually gets written.
 
 ## 3. Skip pairs that only the LLM words call unrelated (any one entity)
 
@@ -105,8 +120,15 @@ What they say:
   67, and the typical case is a Conventions entity holding many unrelated rules.
 - **Contradictions are not part of it.** The 6 words-unrelated contradiction rows predate today's
   detector gates, and the words-related ones are useful (10 approved).
-- **Where:** `FactKeywords::Relatedness::Comparison#hard_unrelated?`, or a sibling predicate that
-  `FactSupersede` and `ReviewPolicies::SubjectCheck` use, so the generator and the policy stay in step.
+- **Where:** a sibling predicate on `FactKeywords::Relatedness::Comparison`, such as `words_unrelated?`
+  (`subject == :unrelated && by_words`). Two places use it, so the generator and the policy stay in step:
+  - `FactSupersede::Candidates#candidate_subject`, which today maps that case to `:unknown` before
+    `Candidate#unrelated?` sees it;
+  - `ReviewPolicies::SubjectCheck.fact_supersede_status`.
+
+  `hard_unrelated?` and the contradiction path stay as they are. These rows get their own dismissal
+  reason, a new constant: "the facts' LLM words share nothing (one entity, no mentions)".
+  `resolution_reason` isn't part of the MCP output, so the new string is UI-only.
 - **Specs:** the row from the Context section, in synthetic form, is neither judged nor proposed. A
   pending judged row of that shape is dismissed by the policy. A words-related pair is unchanged. A term
   match still proposes.
@@ -117,7 +139,9 @@ What they say:
 - `skills/graph-mem-mcp-toolset/SKILL.md` ("Persist") puts source facts "on the project's entity". Its
   "Homes" bullet names User Preferences, `<Project> Conventions` and "environment facts on the entity they
   describe".
-- The `persist` prompt (`app/prompts/persist_prompt.rb`, step 4) says the same.
+- The `persist` prompt (`app/prompts/persist_prompt.rb`) says nothing about source facts. Its step 4
+  names the same homes as SKILL.md's "Homes" bullet, so the source-fact sentence is new there, not
+  reworded.
 - `AGENTS.md`'s graph_mem section and `docs/rules/` say nothing about placement, and they stay as they are
   (12-line limit, `agent_text_sync_spec`).
 
@@ -139,6 +163,8 @@ What they say:
 
 **Checks and measuring:**
 - SKILL.md stays within `agent_text_sync_spec`'s limits and passes `skills-ref validate`.
+- A spec asserts that SKILL.md and the `persist` prompt carry the same placement rule, for example the
+  sentence that keeps the Project entity for whole-project statements, so the two texts can't drift.
 - **Measure after**, counts only, about two weeks after the release:
   - the share of new source facts held by a Project root (78% today);
   - the share of new facts held by a root (12% today);
