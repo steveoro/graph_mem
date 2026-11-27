@@ -40,7 +40,9 @@ fail() {
 
 # Decrypts config/credentials.yml.enc with RAILS_MASTER_KEY without booting the app: a boot would die
 # on the same error with a stack trace. Exits 3 when the key doesn't fit the file (a wrong key, or
-# one of the wrong length); any other error is left for Rails to report.
+# one of the wrong length); any other error is left for Rails to report. Only the exit status
+# counts, so stderr is discarded: Bundler or RubyGems may print warnings there (CircleCI's do),
+# which would bury the one-line fix.
 check_master_key() {
   bundle exec ruby -e '
     require "active_support"
@@ -52,7 +54,7 @@ check_master_key() {
       ).read
     rescue ActiveSupport::MessageEncryptor::InvalidMessage, ArgumentError
       exit 3
-    end'
+    end' 2>/dev/null
 }
 
 check_configuration() {
