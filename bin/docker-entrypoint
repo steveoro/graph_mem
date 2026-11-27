@@ -6,8 +6,36 @@ if [ -z "${LD_PRELOAD+x}" ]; then
     export LD_PRELOAD
 fi
 
+# A secret_key_base generated on first boot lives here: storage/ is the graph_mem_storage volume, so
+# the key survives rebuilds and `docker compose down`. Keep in step with
+# GraphMem::GeneratedSecretKey::PATH, which reads the same file for processes that skip this
+# entrypoint (docker compose exec).
+GENERATED_KEY_FILE=storage/secret_key_base
+
+# secret_key_base without a master key (#206). With SECRET_KEY_BASE or a master key set this changes
+# nothing: Rails takes SECRET_KEY_BASE, or the credentials' secret_key_base, as before. The key is
+# never printed.
+prepare_secret_key_base() {
+  # compose passes SECRET_KEY_BASE="" when .env has none, and Rails would take "" as an invalid key.
+  [ -n "${SECRET_KEY_BASE:-}" ] || unset SECRET_KEY_BASE
+  if [ -n "${SECRET_KEY_BASE:-}" ] || [ -n "${RAILS_MASTER_KEY:-}" ] || [ -f config/master.key ]; then
+    return 0
+  fi
+
+  if [ ! -s "$GENERATED_KEY_FILE" ]; then
+    # umask 077 creates the file 0600. Written to a temp file and renamed, so a failed write never
+    # leaves a partial key behind.
+    (umask 077 && ruby -rsecurerandom -e 'puts SecureRandom.hex(64)' >"$GENERATED_KEY_FILE.tmp")
+    mv "$GENERATED_KEY_FILE.tmp" "$GENERATED_KEY_FILE"
+    echo "secret_key_base: generated and kept in the storage volume (set SECRET_KEY_BASE in .env to choose your own)"
+  fi
+  SECRET_KEY_BASE=$(cat "$GENERATED_KEY_FILE")
+  export SECRET_KEY_BASE
+}
+
 # If running the rails server then create or migrate existing database
 if [ "$1" == "./bin/rails" ] && [ "$2" == "server" ]; then
+  prepare_secret_key_base
   ./bin/rails db:prepare
   ./bin/rails db:support:initialize
 fi
