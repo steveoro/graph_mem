@@ -49,7 +49,9 @@ module GraphMem
     end
 
     # Reads the file the way the entrypoint does (trailing newlines dropped, as `$(cat ...)` drops
-    # them) and accepts only a key of {FORMAT}, so both sides agree on what the key is.
+    # them) and accepts only a key of {FORMAT}, so both sides agree on what the key is. Read as
+    # bytes, so a file that isn't valid UTF-8 gives nil (the entrypoint replaces it) instead of
+    # raising at boot.
     #
     # @param env [ENV, Hash{String => String}]
     # @param root [Pathname] the application root
@@ -59,8 +61,8 @@ module GraphMem
       return unless needed?(env: env, root: root)
 
       path = root.join(PATH)
-      key = path.read.sub(/\n+\z/, "") if path.file?
-      key if key&.match?(FORMAT)
+      key = path.binread.sub(/\n+\z/, "") if path.file?
+      key.force_encoding(Encoding::UTF_8) if key&.match?(FORMAT)
     end
   end
 end

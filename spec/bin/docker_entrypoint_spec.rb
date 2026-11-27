@@ -94,8 +94,8 @@ RSpec.describe "bin/docker-entrypoint" do
     end
 
     it "replaces a key file that isn't one line of 128 hex characters, and a stale 0644 temp file, keeping 0600" do
-      [ "  \n", "\n\n", "#{SecureRandom.hex(32)}\n", "#{SecureRandom.hex(64)}\nextra\n" ].each do |content|
-        File.write(path("storage/secret_key_base"), content)
+      [ "  \n", "\n\n", "#{SecureRandom.hex(32)}\n", "#{SecureRandom.hex(64)}\nextra\n", "\xFF\xFE\n".b ].each do |content|
+        File.binwrite(path("storage/secret_key_base"), content)
         File.write(path("storage/secret_key_base.tmp"), "stale")
         File.chmod(0o644, path("storage/secret_key_base.tmp"))
 
