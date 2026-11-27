@@ -127,11 +127,15 @@ What they say:
   - `ReviewPolicies::SubjectCheck.fact_supersede_status`.
 
   `hard_unrelated?` and the contradiction path stay as they are. These rows get their own dismissal
-  reason, a new constant: "the facts' LLM words share nothing (one entity, no mentions)".
+  reason, a new constant: "the facts' LLM words share nothing (one entity, no mentions)". It is picked in
+  `SubjectCheck.reason`, for "Outdated by a fact" rows only, which is where NoSharedSubject reads it.
   `resolution_reason` isn't part of the MCP output, so the new string is UI-only.
-- **Specs:** the row from the Context section, in synthetic form, is neither judged nor proposed. A
-  pending judged row of that shape is dismissed by the policy. A words-related pair is unchanged. A term
-  match still proposes.
+- **Specs:**
+  - the row from the Context section, in synthetic form, is neither judged nor proposed;
+  - a pending judged row of that shape is dismissed by the policy, with the new reason recorded;
+  - a words-related pair is unchanged;
+  - a term match still proposes;
+  - a words-unrelated contradiction row keeps its current status and reason.
 
 ## 4. Where agents write facts (skill and prompt text)
 
