@@ -2,8 +2,12 @@
 
 > Status: draft, 2026-11-20, written on `main` at 1.92.0. Revised the same day after Steve's
 > answers and two review rounds (see "Answers" at the end). **R1a shipped as 1.93.0** (see its
-> "As built" note). R1b started on 2026-11-26 (see its "Kickoff" note); R1c onward is not started. Each
-> PR below gets its own kickoff.
+> "As built" note). **R1b and R1c shipped together as 1.96.0** (R1b-1, #204, and R1b-2; see the
+> "Kickoff" and "As built (1.96.0)" notes under R1b and the "As built" note under R1c). R2 onward is not
+> started. Each PR below gets its own kickoff.
+>
+> **Versions (2026-11-27):** 1.95.0 went to the first-run setup (#206, #207, its own plan), released
+> while R1b was in review, so R1b and R1c moved to **1.96.0** and R2 to **1.97.0**.
 >
 > **Versions (2026-11-24):** the `part_of` membership PRs took 1.93.1 and 1.93.2 (their own plan), so
 > the mcp 1.11.0 bump moved to 1.93.3. Later the same day the embedding calls moved out of the
@@ -118,9 +122,9 @@ The versions, as expected today (each kickoff confirms its own against `version.
 | Embeddings outside the membership lock | A follow-up of the membership PRs (`done/part-of-membership-plan.md`, Follow-ups) | after PR 2 (shipped) | 1.93.3 |
 | mcp 1.11.0 | (its own plan) | after the follow-up | 1.93.4 |
 | SQL exchange | (its own plan, five PRs incl. the JSON export's retirement: `done/sql-exchange-plan.md`) | after mcp 1.11.0 (shipped) | 1.94.0 |
-| **R1b** | Retype library `part_of` edges, the orphan rule, the scans, the SQL export's scope, dream-state actor on its edges (two PRs, R1b-1 and R1b-2; see its "Kickoff" note) | after the SQL exchange train | 1.95.0 |
-| **R1c** | Removal-style evidence rows | with or right after R1b | with R1b, or 1.95.1 |
-| **R2** | Relation lifecycle | after R1 | 1.96.0 |
+| **R1b** | Retype library `part_of` edges, the orphan rule, the scans, the SQL export's scope, dream-state actor on its edges (two PRs, R1b-1 and R1b-2; see its "Kickoff" note) | after the SQL exchange train (shipped) | 1.96.0 |
+| **R1c** | Removal-style evidence rows | with R1b, in R1b-2 (shipped) | 1.96.0 |
+| **R2** | Relation lifecycle | after R1 | 1.97.0 |
 
 Each PR has its own kickoff, the usual ~3,000-line stop and push-and-continue checkpoints. R1a is
 about the size of 1.92.0; R1b is smaller in code but touches membership-adjacent paths.
@@ -344,9 +348,9 @@ below were made in the session, on the plan's "R1b's kickoff decides".
     - its docs.
   - **R1b-2**, stacked on it, carries:
     - the SQL export's scope and the export picker's roots;
-    - R1c (or 1.95.1 if the diff runs past the stop line);
+    - R1c (or 1.96.1 if the diff runs past the stop line);
     - its docs;
-    - the 1.95.0 release.
+    - the 1.96.0 release.
 - **Payload keys.** The keys stay R1a's: `operation`, `relation_id`, `from_entity_id`, `from_name`,
   `to_entity_id`, `to_name`, `old_type`, `new_type`, `reason`, plus `evidence`.
   - **`swap`:** `relation_id` and the endpoints are the stored `part_of` edge (library → Project),
@@ -379,6 +383,67 @@ below were made in the session, on the plan's "R1b's kickoff decides".
   SoftwareLibrary, TestFramework`, which covers 22 of the 23. The one left is a loose name match, which
   the operator can add in Settings.
 
+**As built (1.96.0).** R1b shipped as two PRs released together: R1b-1 (#204) and R1b-2, which also
+carries R1c (see its note) and the release. What Steve said comes first, then the calls made in the
+sessions.
+
+- **Steve:** the go after 1.94.0; the scans link a global library and write facts onto it (the
+  Kickoff's first bullet); and the review tools' new output (the `swap` and `add` operations and their
+  `evidence`), approved during #204's review.
+- **R1b-1, calls made in the session** (listed in #204):
+  - *Merge direction on a collision:* the queued `entity_merge` merges the global namesake into the
+    project's library. The survivor keeps the row's `part_of`, takes the namesake's `depends_on` edges
+    and children, and the swap applies next. The other direction fails: the global node would take
+    the library's parent while the library still holds the name in the project. The cost is that the
+    global node's id goes away.
+  - *A merge suggestion only for the same type:* a namesake of another type refuses the row with
+    "rename or retype one", and nothing is queued.
+  - *The new `depends_on` is a bare edge:* it doesn't carry the `part_of`'s weight, confidence or
+    properties, unlike R1a's retype of the same edge.
+  - *The project's own copy wins in a scan:* a scanned project that still holds an entity of that name
+    uses it, and the collision and merge flow handles the swap.
+  - *Limitation:* facts a project's scans wrote onto a library before its swap keep their old source,
+    so the new validation scope doesn't cover them.
+  - *Review fixes:* a `part_of` the model emits from one of the project's items to a global
+    dependency-like entity is not written, so the item stays in the project; the swap policy treats a
+    capped read of the library's facts as an ownership signal (it fails closed).
+  - *The default types* became `Framework, Gem, Tool, SoftwareLibrary, TestFramework` (the Kickoff's
+    last bullet has the counts).
+- **R1b-2, calls made in the session:**
+  - *The export's hop* (`SqlExport::Scope`) applies to every exported Project, nested ones included
+    (with `NESTED=0`, to the roots only). It runs after every tree is in, so a library that is also a
+    root, or in a root's tree, keeps all its edges. An edge from outside the export into an entity held
+    only through the hop (another project's `depends_on`) is left out. After Graphy's first review of
+    R1b-2, so is an edge from such an entity out to another project's member or to a Project, and so are
+    the facts another project's scans wrote onto the library: the script names no other project through
+    it. A library's own `depends_on`, a member's `depends_on` and the Projects nested under a library are
+    not followed. The template didn't change: the format stays v1.
+  - *The roots* are `part_of` only, as the Kickoff decided: `GET /data_exchange/root_nodes` and the
+    export picker list a global library, also one that `depends_on` another.
+- **R1b-2, the round trips** (the Kickoff asked to record what happens). The two fixes are the lead's
+  decisions on the session's options, not Steve's:
+  - into an empty target, and into one where the library is global already: as expected (the library
+    and its child land global, or match by name; no duplicate, no drift);
+  - into a target that hasn't swapped: the script's library is global, so the import adds a global
+    copy, with its children, next to the project's member. The target's swap is refused and queues the
+    merge of the copy into the member, which the copy's children refused, their names being taken in
+    the project. *Fix:* `RelationRetypeDependency` also queues an `entity_merge` for each same-named,
+    same-type pair across the two `part_of` subtrees (the namesake's member into the library's), so
+    the queued rows alone converge it (the child merges, the library merge, the swap), and
+    `data_exchange.md` lists it as a known limit (swap on the target first; identical facts sit twice
+    on the survivor until dream state's dedupe). A child name an unrelated global entity holds still
+    queues nothing (R1b's item 2);
+  - a swapped library holding an active `source-fact` fact made its Project's script, and its own,
+    refused on a target without it: outside a project the tag is inert, and the model and `06_checks`
+    refuse it. *Fix:* `SqlExport::Writer` leaves that tag out of an active fact on a global non-Project
+    entity; the source keeps it; template v1 and `06_checks` are unchanged.
+- **Not changed:** tool counts (12 / 9 / 22), parameters and schemas; no migration; the graph_mem-sql
+  template.
+- **Done when:** the synthetic parts are specs (`dream_state_dependency_swap_spec`, the SQL exchange
+  scenario spec, `SqlExport::Scope`'s spec). The production re-measure (library-like entities under
+  `part_of` a Project, orphans, dream-state edges by actor) waits for the release to be deployed and
+  the swaps to be applied.
+
 ## R1c. Removal-style evidence (with or right after R1b)
 
 When a fact on any entity of a project says a named entity was removed, replaced or dropped, and a
@@ -387,6 +452,52 @@ with the fact as evidence. In R1 the row is **informational**: it can be dismiss
 `apply_maintenance_review` answers a validation error ("ending a relation arrives with the relation
 lifecycle; remove the relation by hand if it is wrong"). R2 gives it its apply. Only 2 library-like
 entities are named in such a fact today, so this is small.
+
+**As built (1.96.0, with R1b-2).** The calls below were made in the session, on the kickoff's spec
+(the edges' type filter is the lead's); none is Steve's.
+
+- **Where.** A second pass of phase `dependency_edges` (`DreamStateCompactor::RemovalEvidencePass`),
+  not a new phase: it reads the same kind of edges (a Project and what it uses) and the same project
+  facts as the swap's evidence, and keeping the phase list as it is leaves the stepper, the progress
+  totals and the specs that pin the phases alone. The swap pass ends, `stats["dependency_pass"]`
+  becomes `removal` and the same job runs the first removal batch; the phase ends after it. 200 edges
+  per job, its cursor in `stats["removal_cursor_id"]`, pause after each batch, no membership lock, no
+  LLM.
+- **Edges.** A Project root's outgoing `depends_on`, and a `part_of` into a Project root only from an
+  entity of a dependency-like type (`DependencyLikeTypes`; a blank setting reads none). "Holds by
+  `part_of`" was read as the Project's own edge, so a deeper member's `part_of` and a member's own
+  `depends_on` are not read. The type filter is the lead's call after a counts-only estimate on
+  production (2026-11-26, replicating the edges, the candidate query and the pattern): the 431
+  `part_of` edges from ordinary direct children gave 39 edges with a hit and 58 (edge, fact) pairs, 57
+  of them facts held by the child itself that say "removed …" or "dropped …" about something else (a
+  component's change note), so noise; the 21 from dependency-like children gave 1 edge and 6 pairs,
+  none held by the entity. R1's aim is an outdated library through a past relation, so an ordinary
+  member's `part_of` is out of scope.
+- **Facts.** The project's active facts (root and members, as R1b's evidence reads them) that name the
+  entity by its keyword path or by its text, and match `RemovalEvidence::PHRASES` ("removed",
+  "replaced … by", "replaced … with" with up to three words for "…", "dropped", "no longer uses",
+  "no longer used", "no longer depends on", "no longer needs", "migrated away from", "migrated off",
+  "switched away from", "got rid of", "ripped out", "uninstalled"). The text counts even when the path
+  is computed (unlike R1b's evidence): a global library is in no project's keyword path. A global
+  library's own facts are not the project's, so they aren't read; a held member's are. The phrase can
+  be anywhere in the fact, so a fact naming the entity as the replacement is queued too (dismissed by
+  the operator).
+- **Rows.** Kind `relation_review`, keys as the kickoff listed (`relation_id`, `relation_type`, the
+  endpoints, `evidence` with `observation_id`, `entity_id`, `entity_name`, `excerpt` cut to 200
+  characters, `reason`), one per (relation, fact), signature `relation_review|<relation>|<fact>`; at most
+  three new rows per relation and run, and 100 per run (`RUN_CAPS`). Confidence 0.6, impact 0.3, so
+  `expire_low_confidence` doesn't expire them; grouped by relation, anchored on the entity.
+- **Informational.** `ReviewRowClassifier::INFORMATIONAL_KINDS`: the Review card and row show Dismiss
+  and Snooze only and no "If applied" effects; `CompactionReviewService.apply` answers the validation
+  error before any lock, change set or row write; `apply_maintenance_review` raises it as
+  `category: "validation"` with a `next_move` (dismiss or snooze it, or delete the relation by id with
+  `graph_delete`), the one change in `app/tools` (no description, parameter or schema change); bulk and
+  group apply skip it ("informational: dismiss or snooze it"); edits are refused; Dangling dismisses a
+  row whose relation is gone or whose fact is gone or inactive.
+- **Stats and card.** `removal_edges_checked`, `removal_cursor_id`, `relation_reviews_queued` and
+  `dependency_pass`; the compactor card's chip **Relation reviews queued**.
+- **Not measured yet:** the production count (2 library-like entities named in a removal fact on
+  2026-11-20) is re-read after the release is deployed and a run has gone through.
 
 ## R2. A lifecycle for relations (migration; MCP output change, needs Steve's approval)
 

@@ -113,6 +113,13 @@ class CompactionReviewService
         return nil if subject.blank? || payload[:new_type].blank?
 
         [ "relation_retype", operation, subject, payload[:new_type] ].join("|")
+      when "relation_review"
+        # R1c: one row per (relation, removal fact); a dismissal suppresses that pair only.
+        relation_id = payload[:relation_id]
+        observation_id = payload.dig(:evidence, :observation_id)
+        return nil if relation_id.blank? || observation_id.blank?
+
+        [ "relation_review", relation_id.to_i, observation_id.to_i ].join("|")
       when "fact_supersede"
         # Per pair: a dismissal suppresses this fact against this observation only.
         fact_id = payload[:fact_observation_id]

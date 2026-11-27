@@ -19,6 +19,8 @@ class ReviewRowClassifier
       when "delete_relation" then relation_pair(kind, payload, row_uuid)
       # The pair's group, anchored on the child: the entity whose membership the part_of decides.
       when "relation_retype" then retype_pair(kind, payload, row_uuid)
+      # R1c: one group per relation, anchored on the entity the Project depends_on or holds.
+      when "relation_review" then review_relation(kind, payload, row_uuid)
       when *OBSERVATION_KINDS then observation_owner(kind, payload, row_uuid)
       when "dismiss_compaction_review" then [ "#{kind}|#{field(payload, :review_item_id)}", nil ]
       # One group per fact; the anchor is the outdated observation's entity (its project).
@@ -73,6 +75,14 @@ class ReviewRowClassifier
       return relation_pair(kind, payload, row_uuid) unless from_id && to_id
 
       [ "#{kind}|#{[ from_id, to_id ].sort.join('-')}", field(payload, :operation) == "add" ? to_id : from_id ]
+    end
+
+    def review_relation(kind, payload, row_uuid)
+      relation_id = integer(field(payload, :relation_id))
+      return [ "#{kind}|row:#{row_uuid}", nil ] unless relation_id
+
+      end_key = field(payload, :relation_type) == "part_of" ? :from_entity_id : :to_entity_id
+      [ "#{kind}|rel:#{relation_id}", integer(field(payload, end_key)) ]
     end
 
     def observation_owner(kind, payload, row_uuid)

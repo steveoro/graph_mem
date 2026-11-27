@@ -68,6 +68,19 @@ RSpec.describe 'DataExchange', type: :request do
       expect(node['entity_type']).to eq('Project')
       expect(node['observations_count']).to eq(1)
     end
+
+    # Dream State R1b: only part_of makes a child, so a library after its swap is a root.
+    it 'lists a global library that depends_on another one, after the Projects' do
+      library = MemoryEntity.create!(name: 'SynthLib', entity_type: 'Gem')
+      core = MemoryEntity.create!(name: 'SynthCore', entity_type: 'Gem')
+      MemoryRelation.create!(from_entity: project1, to_entity: library, relation_type: 'depends_on')
+      MemoryRelation.create!(from_entity: library, to_entity: core, relation_type: 'depends_on')
+
+      get root_nodes_data_exchange_index_path
+
+      names = JSON.parse(response.body)['nodes'].map { |node| node['name'] }
+      expect(names).to eq([ 'Project Alpha', 'Project Beta', 'SynthCore', 'SynthLib' ])
+    end
   end
 
   describe 'GET /data_exchange/export' do

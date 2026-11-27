@@ -7,6 +7,8 @@ module SqlExport
   # header, then the template's fixed part around the staging INSERTs (at most BATCH_ROWS rows or
   # BATCH_BYTES per statement, every value through connection.quote). Ids travel only as staging keys;
   # no embedding, keyword, trust score or cloud column is written. The header names no host and no path.
+  # Values travel as stored, but for the relation types (Template.relation_type) and the source-fact
+  # tag of an active fact on a global entity (#tags_for).
   #
   #   SqlExport::Writer.new([ project.id ]).write_file("tmp/exports/synth_prj.sql")
   #   # => { entities: 84, observations: 912, relations: 140, refs: 3 }
@@ -108,9 +110,29 @@ module SqlExport
       raw_rows(MemoryObservation, columns, @scope.observation_ids).map do |row|
         id, entity_id, *values, superseded_by, outdated_by, created_at, updated_at = row
         values = values.each_with_index.map { |value, index| [ 3, 4, 7 ].include?(index) ? time(value) : value }
+        values[5] = tags_for(values[5], entity_id, values[6])
         [ @observation_sk[id], @entity_sk.fetch(entity_id), *values, key_of(superseded_by, id), key_of(outdated_by, id),
           time(created_at), time(updated_at) ]
       end
+    end
+
+    # The stored tags, without the source-fact tag when the fact is active and its entity is global and
+    # not a Project (a library after its swap, a global root's member). The tag is inert there: the
+    # fact is in no project, so SourceFact#source_fact? is false and nothing is outdated by it, and the
+    # model refuses the tag on such a fact when it is saved, as the target's 06_checks would refuse the
+    # whole script. The source keeps its tag.
+    # @param raw [String] the stored tags (JSON text)
+    # @param entity_id [Integer]
+    # @param status [String]
+    # @return [String]
+    def tags_for(raw, entity_id, status)
+      return raw unless status == MemoryObservation::ACTIVE_STATUS && @scope.entity_roots[entity_id].nil?
+      return raw if @entities.fetch(entity_id).entity_type == NodeOperationsStrategy::PROJECT_ENTITY_TYPE
+
+      tags = JSON.parse(raw.to_s)
+      tags.is_a?(Array) && tags.include?(SourceFact::SOURCE_FACT_TAG) ? (tags - [ SourceFact::SOURCE_FACT_TAG ]).to_json : raw
+    rescue JSON::ParserError
+      raw # the value guards name it on import
     end
 
     # A link to a dropped duplicate points at its kept copy; a link to itself, or outside the export, is NULL.

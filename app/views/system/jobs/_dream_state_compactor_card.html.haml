@@ -67,6 +67,7 @@
       = dashboard_stat_chip("Relationships queued", stats["relationships_queued"] || 0)
       = dashboard_stat_chip("Relation types fixed", stats["relation_types_fixed"].to_i + stats["relation_types_merged"].to_i)
       = dashboard_stat_chip("Dependency rows queued", stats["dependency_swaps_queued"].to_i + stats["dependency_adds_queued"].to_i)
+      = dashboard_stat_chip("Relation reviews queued", stats["relation_reviews_queued"].to_i)
 
   .system-actions
     - if compaction_pausable?(compaction)

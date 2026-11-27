@@ -29,6 +29,19 @@ RSpec.describe "System › Background jobs", type: :request do
     expect(jobs.at_css("#btn-dream-state-refresh")).to be_nil # 1.84.0: the cards refresh themselves
   end
 
+  # Dream State R1b and R1c: the compactor card's chips for the dependency rows and the relation reviews.
+  it "shows the run's dependency rows and relation reviews queued" do
+    CompactionRun.create!(status: "running", phase: "dependency_edges", started_at: 1.minute.ago,
+                          stats: { "dependency_swaps_queued" => 2, "dependency_adds_queued" => 1, "relation_reviews_queued" => 4 })
+
+    get system_jobs_path
+
+    chips = Nokogiri::HTML(response.body).css("[data-testid='compaction-card'] .system-stat").to_h do |chip|
+      [ chip.at_css(".system-stat__label").text, chip.at_css(".system-stat__value").text ]
+    end
+    expect(chips).to include("Dependency rows queued" => "3", "Relation reviews queued" => "4")
+  end
+
   it "shows the repair action only when compaction failed with a relation error" do
     get system_jobs_path
     expect(response.body).not_to include('id="btn-repair-relations"')

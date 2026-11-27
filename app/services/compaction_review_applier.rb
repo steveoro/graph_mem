@@ -46,6 +46,8 @@ class CompactionReviewApplier
         LifecycleCorruption.apply(effective, action_params)
       when "relation_retype"
         RelationRetype.apply(effective, action_params)
+      when RelationReview::KIND
+        RelationReview.apply(effective)
       else
         { success: false, error: "Unknown review kind: #{row.kind}" }
       end

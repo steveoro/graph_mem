@@ -188,4 +188,175 @@ RSpec.describe "graph_mem-sql: restore an older export over an edited graph" do
     expect(graph_by_names(project)).to eq(expected)
     expect(graph_by_names(@other)).to eq(other)
   end
+
+  # Dream State R1b: after the swap a library is global, the Project's depends_on it. The Project's
+  # script follows that edge one hop (SqlExport::Scope), so the library travels as rows with its
+  # own part_of subtree, not only as a reference by name.
+  describe "a Project whose library was swapped for its depends_on" do
+    let(:operator) { "operator:synth@127.0.0.1" }
+
+    def build_library!
+      travel_to(t0) do
+        @app = fs_project!("SynthApp")
+        @widget = fs_member!(@app, "SynthWidget", "Component")
+        @lib = fs_member!(@app, "SynthLib", "Gem", description: "Parses the feeds")
+        @notes = fs_member!(@lib, "SynthLib Notes", "Documentation")
+        fs_observe!(@app, "SynthApp uses SynthLib to parse its feeds.")
+        fs_observe!(@lib, "SynthLib 2 needs Ruby 3.4.")
+        fs_observe!(@notes, "Pin SynthLib below 3.")
+      end
+    end
+
+    # The R1b-1 swap, through its review row (the pending one when it was queued already).
+    def swap_library!(library = @lib, project = @app)
+      relation = MemoryRelation.find_by!(from_entity_id: library.id, to_entity_id: project.id, relation_type: "part_of")
+      names = { library.id => library.name, project.id => project.name }
+      item = CompactionReviewApplier::RelationRetypeDependency.swap_item(relation, names, evidence: { entity_type: library.entity_type, facts: [] })
+      row = CompactionReviewService.seed_report(report_type: "compaction_review", source: "test", items: [ item ]).first ||
+            MaintenanceReportRow.pending.find_by!(kind: "relation_retype", signature: "relation_retype|swap|#{relation.id}|depends_on")
+      apply_row(row)
+    end
+
+    def apply_row(row) = Current.set(actor: operator) { CompactionReviewService.apply(row.row_uuid) }
+
+    def global(name) = MemoryEntity.find_by!(name: name, project_id: nil)
+
+    def depends_on?(from, to) = MemoryRelation.exists?(from_entity_id: from.id, to_entity_id: to.id, relation_type: "depends_on")
+
+    def parent_ids(entity) = MemoryRelation.where(from_entity_id: entity.id, relation_type: "part_of").pluck(:to_entity_id)
+
+    it "carries the library as rows: into an empty target it lands global with its children, SynthApp depends_on it, no drift" do
+      build_library!
+      expect(travel_to(t0 + 1.minute) { swap_library! }).to include(success: true)
+      expected_app = graph_by_names(@app)
+      expected_lib = graph_by_names(@lib)
+      script = sql_export(@app)
+      expect(script).to include("-- roots: SynthApp (Project)\n", "-- counts: entities=4 observations=3 relations=3 refs=0\n")
+      sql_delete_tree!(@app)
+      sql_delete_tree!(@lib)
+
+      result = sql_import(script)
+
+      app = global("SynthApp")
+      lib = global("SynthLib")
+      notes = global("SynthLib Notes")
+      expect(lib).to have_attributes(entity_type: "Gem", description: "Parses the feeds")
+      expect(depends_on?(app, lib)).to be(true)
+      expect(parent_ids(lib)).to be_empty
+      expect(parent_ids(notes)).to eq([ lib.id ])
+      expect(graph_by_names(app)).to eq(expected_app)
+      expect(graph_by_names(lib)).to eq(expected_lib)
+      expect(sql_counts(result)).to include("entities/new" => 4, "observations/new" => 3, "relations/new" => 3)
+      expect(ProjectIdBackfill.drift.any?).to be(false)
+    end
+
+    it "merges into a target where the library is global already: matched by name, no duplicate" do
+      build_library!
+      swap_library!
+      script = sql_export(@app)
+      sql_delete_tree!(@app) # the target has the library global (it swapped too), but not the project
+      fs_observe!(@lib, "Only the target knows this.")
+
+      result = sql_import(script)
+
+      app = global("SynthApp")
+      expect(MemoryEntity.where(name: "SynthLib").pluck(:id)).to eq([ @lib.id ])
+      expect(MemoryEntity.where(name: "SynthLib Notes").pluck(:id)).to eq([ @notes.id ])
+      expect(depends_on?(app, @lib)).to be(true)
+      expect(@lib.reload.project_id).to be_nil
+      expect(@lib.memory_observations.pluck(:content)).to contain_exactly("SynthLib 2 needs Ruby 3.4.", "Only the target knows this.")
+      expect(sql_counts(result)).to include("entities/new" => 2, "entities/unchanged" => 2, "relations/new" => 2, "relations/unchanged" => 1)
+      expect(ProjectIdBackfill.drift.any?).to be(false)
+    end
+
+    it "exports the library alone with its subtree, and the Project only as a reference" do
+      build_library!
+      swap_library!
+
+      script = sql_export(@lib)
+
+      expect(script).to include("-- roots: SynthLib (Gem)\n", "-- counts: entities=2 observations=2 relations=2 refs=1\n")
+      expect(script).to match(/INSERT INTO gm_stage_refs \(sk, project_name, name, entity_type\) VALUES\n\(3, NULL, 'SynthApp', 'Project'\);/)
+      expect(script).not_to include("SynthWidget", "SynthApp uses SynthLib")
+    end
+
+    # A target that hasn't swapped yet holds the library as a project member. The script's library is
+    # global, so the merge (which matches a global row in the global scope only) inserts a global copy
+    # next to the member; the target's own swap then meets that copy and goes through the collision
+    # flow, which queues the merge of the two libraries and of each same-named child pair.
+    it "into a target that hasn't swapped: a global copy comes in next to the member, and the queued rows alone converge it" do
+      build_library!
+      script = nil
+      ActiveRecord::Base.transaction(requires_new: true) do
+        travel_to(t0 + 1.minute) { swap_library! }
+        script = sql_export(@app)
+        raise ActiveRecord::Rollback # back to the unswapped graph: the target
+      end
+      expect(@lib.reload.project_id).to eq(@app.id)
+
+      result = sql_import(script)
+
+      copy = global("SynthLib")
+      copy_notes = global("SynthLib Notes")
+      expect(MemoryEntity.where(name: "SynthLib").pluck(:id, :project_id)).to contain_exactly([ @lib.id, @app.id ], [ copy.id, nil ])
+      expect(parent_ids(@lib)).to eq([ @app.id ])
+      expect(depends_on?(@app, copy)).to be(true)
+      expect(parent_ids(copy_notes)).to eq([ copy.id ])
+      expect(sql_counts(result)).to include("entities/new" => 2, "relations/new" => 2)
+      expect(ProjectIdBackfill.drift.any?).to be(false)
+
+      # The target's swap is refused (the global copy holds the name) and queues two merges: the copy into
+      # the member, and the copy's child into the member's child of the same name and type.
+      swap = swap_library!
+      expect(swap).to include(success: false)
+      expect(swap[:error]).to include("a global Gem 'SynthLib' (##{copy.id}) already has its name")
+      merges = MaintenanceReportRow.where(kind: "entity_merge").order(:id).to_a
+      expect(merges.map { |row| row.payload.values_at("entity_a", "entity_b").map { |side| side["entity_id"] } })
+        .to eq([ [ copy.id, @lib.id ], [ copy_notes.id, @notes.id ] ])
+      library_merge, child_merge = merges
+
+      # The library merge first would move the copy's child into the project, where its name is taken.
+      refused = apply_row(library_merge)
+      expect(refused).to include(success: false)
+      expect(refused[:error]).to include("SynthLib Notes")
+
+      # The child merge, then the library merge, then the swap: the queued rows alone converge it.
+      expect(apply_row(child_merge)).to include(success: true)
+      expect(apply_row(library_merge)).to include(success: true)
+      expect(swap_library!).to include(success: true)
+
+      expect(MemoryEntity.where(name: "SynthLib").pluck(:id, :project_id)).to eq([ [ @lib.id, nil ] ])
+      expect(MemoryEntity.where(name: "SynthLib Notes").pluck(:id, :project_id)).to eq([ [ @notes.id, nil ] ])
+      expect(depends_on?(@app, @lib)).to be(true)
+      expect(parent_ids(@lib)).to be_empty
+      expect(parent_ids(@notes)).to eq([ @lib.id ])
+      expect(ProjectIdBackfill.drift.any?).to be(false)
+      expect(ProjectIdBackfill.new(out: StringIO.new).run.changed).to eq(0)
+    end
+
+    # An active fact tagged source-fact keeps its tag through the swap, but outside a project the tag is
+    # inert and the model refuses it on save, as the import's checks would: the writer leaves it out.
+    it "carries a swapped library's source fact active and without its tag; the source keeps the tag" do
+      build_library!
+      fact = fs_fact!(@lib, "SynthLib 3 replaces the old parser.", tags: [ "synth" ])
+      swap_library!
+      expect(fact.reload).to have_attributes(status: "active", tags: [ SourceFact::SOURCE_FACT_TAG, "synth" ])
+      project_script = sql_export(@app)
+      library_script = sql_export(@lib)
+      expect(fact.reload.tags).to eq([ SourceFact::SOURCE_FACT_TAG, "synth" ])
+      sql_delete_tree!(@app)
+      sql_delete_tree!(@lib)
+
+      sql_import(project_script)
+
+      copy = global("SynthLib").memory_observations.find_by!(content: fact.content)
+      expect(copy).to have_attributes(status: "active", tags: [ "synth" ])
+      sql_delete_tree!(global("SynthApp"))
+      sql_delete_tree!(global("SynthLib"))
+
+      sql_import(library_script)
+
+      expect(global("SynthLib").memory_observations.find_by!(content: fact.content)).to have_attributes(status: "active", tags: [ "synth" ])
+    end
+  end
 end

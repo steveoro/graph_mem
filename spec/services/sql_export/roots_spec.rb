@@ -14,8 +14,22 @@ RSpec.describe SqlExport::Roots do
     end
   end
 
-  it "lists Projects first, then entities with no outgoing part_of or depends_on, each group by name" do
-    expect(described_class.list.map(&:name)).to eq([ "Project Alpha", "Project Beta", "Orphan Node" ])
+  # Only part_of makes a child (Dream State R1b): Task Two depends_on a member but has no parent.
+  it "lists Projects first, then entities with no outgoing part_of, each group by name" do
+    expect(described_class.list.map(&:name)).to eq([ "Project Alpha", "Project Beta", "Orphan Node", "Task Two" ])
+  end
+
+  it "lists a global library after its swap, also when it depends_on another library" do
+    library = MemoryEntity.create!(name: "SynthLib", entity_type: "Gem")
+    core = MemoryEntity.create!(name: "SynthCore", entity_type: "Gem")
+    fs_member!(library, "SynthLib Notes", "Documentation")
+    MemoryRelation.create!(from_entity: alpha, to_entity: library, relation_type: "depends_on")
+    MemoryRelation.create!(from_entity: library, to_entity: core, relation_type: "depends_on")
+
+    names = described_class.list.map(&:name)
+
+    expect(names).to include("SynthLib", "SynthCore")
+    expect(names).not_to include("SynthLib Notes", "Task One")
   end
 
   it "keeps a Project that is part of another Project" do

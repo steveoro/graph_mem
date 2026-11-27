@@ -12,7 +12,8 @@
       - if editable && row.pending?
         = submit_tag "Save", class: "ui-btn", data: { review_keys_action: "edit" }
     - choice = ReviewRowClassifier::CHOICE_KINDS.include?(row.kind)
-    - unless choice
+    -# An informational row (R1c) has nothing to apply: its card says why.
+    - unless choice || ReviewRowClassifier::INFORMATIONAL_KINDS.include?(row.kind)
       = render "review/effects", preview: preview
     .review-detail__actions
       - if row.pending?

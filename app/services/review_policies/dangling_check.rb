@@ -101,6 +101,15 @@ module ReviewPolicies
         MemoryRelation.fold_relation_type(target) == MemoryRelation.fold_relation_type(new_type)
     end
 
+    # R1c: the relation is gone, or its removal fact is gone or no longer active.
+    def relation_review_reason(payload, field)
+      relation_id = field.call("relation_id")
+      return "relation ##{relation_id} gone" unless MemoryRelation.exists?(id: relation_id)
+
+      evidence = payload["evidence"].is_a?(Hash) ? payload["evidence"] : {}
+      inactive_observation([ evidence["observation_id"] || 0 ], any: true)
+    end
+
     def relation_integrity_reason(_payload, field)
       keep_id = field.call("keep_id")
       delete_ids = Array(field.call("delete_ids") || field.call("delete_id"))

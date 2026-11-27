@@ -199,17 +199,39 @@ class CompactionReviewApplier
     # other projects' depends_on) and children, so the swap applies next with no name left to
     # collide. The other way, the global target would take the library's parent and move into the
     # project while the library still holds the name there, which the merge refuses.
+    #
+    # R1b-2: the namesake's children would move into the project with it, so a same-named,
+    # same-type pair across the two part_of subtrees (an imported copy of a library and its
+    # children, for one) would refuse that merge. Each such pair gets its own entity_merge, the
+    # namesake's child into the library's, to apply first: then the library merge and the swap.
     def queue_merge(pair)
       source, target = pair
-      CompactionReviewService.seed_report(report_type: RelationTypeSweep::REVIEW_REPORT_TYPE, source: MERGE_SOURCE, items: [ {
-        id: SecureRandom.uuid, kind: "entity_merge",
+      items = [ merge_item(source, target, "Same name: '#{target.name}' can't leave its project for the global scope " \
+                                           "(relation_retype swap) while the global '#{source.name}' (##{source.id}) exists. Merging " \
+                                           "the global one into it, then applying the swap, leaves one global node that every project depends_on") ]
+      items += child_pairs(source, target).map do |theirs, ours|
+        merge_item(theirs, ours, "Same name under two same-named libraries: '#{theirs.name}' under the global '#{source.name}' " \
+                                 "(##{source.id}) and under '#{target.name}' (##{target.id}). Merge it first: the merge of the two " \
+                                 "libraries moves the global one's children into the project, where this name is taken")
+      end
+      CompactionReviewService.seed_report(report_type: RelationTypeSweep::REVIEW_REPORT_TYPE, source: MERGE_SOURCE, items: items)
+    end
+
+    def merge_item(source, target, reason)
+      { id: SecureRandom.uuid, kind: "entity_merge",
         entity_a: { entity_id: source.id, name: source.name, entity_type: source.entity_type },
         entity_b: { entity_id: target.id, name: target.name, entity_type: target.entity_type },
-        recommendation: "review_manually",
-        reason: "Same name: '#{target.name}' can't leave its project for the global scope (relation_retype swap) while " \
-                "the global '#{source.name}' (##{source.id}) exists. Merging the global one into it, then applying the " \
-                "swap, leaves one global node that every project depends_on"
-      } ])
+        recommendation: "review_manually", reason: reason }
+    end
+
+    # @return [Array<Array(MemoryEntity, MemoryEntity)>] [namesake's member, library's member] pairs
+    #   with one name (case-insensitively) and one type, across the two part_of subtrees
+    def child_pairs(namesake, library)
+      ours = MemoryEntity.where(id: ProjectMembership.member_ids(library.id).to_a).index_by { |entity| [ entity.name.downcase, entity.entity_type ] }
+      MemoryEntity.where(id: ProjectMembership.member_ids(namesake.id).to_a).order(:id).filter_map do |theirs|
+        match = ours[[ theirs.name.downcase, theirs.entity_type ]]
+        [ theirs, match ] if match
+      end
     end
 
     # --- add -------------------------------------------------------------------------------------

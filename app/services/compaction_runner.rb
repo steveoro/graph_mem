@@ -117,6 +117,7 @@ class CompactionRunner
         "relation_retypes_queued" => 0,
         "dependency_swaps_queued" => 0,
         "dependency_adds_queued" => 0,
+        "relation_reviews_queued" => 0,
         "merges_auto" => 0,
         "merges_queued" => 0,
         "observations_deduped" => 0,
