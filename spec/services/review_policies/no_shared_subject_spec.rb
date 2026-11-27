@@ -125,7 +125,8 @@ RSpec.describe ReviewPolicies::NoSharedSubject do
     expect([ unjudged_detail, judged_related ].map { |row| row.reload.status }).to all(eq("active"))
   end
 
-  it "never dismisses a judged row whose facts differ only by their LLM words (Steve, final review)" do
+  # 1.96.1 (Steve, 2026-11-27): 1.83.0 kept the judged row; none of 67 such rows was right.
+  it "dismisses a row whose facts share no LLM word, judged or not, with its own reason" do
     fact = fs_fact!(grant, "Deploys with Kamal 2.").tap { |observation| FactKeywords.compute!([ observation.reload ]) }
     old = computed("Shipped to production via Capistrano.")
     fact.update_columns(llm_keywords: %w[deployment], llm_keywords_at: Time.current)
@@ -138,8 +139,8 @@ RSpec.describe ReviewPolicies::NoSharedSubject do
 
     described_class.new.call
 
-    expect(judged.reload.status).to eq("active")
-    expect(unjudged.reload).to have_attributes(status: "dismissed", resolution_reason: ReviewPolicies::SubjectCheck::REASON_NOT_SAME)
+    expect([ judged, unjudged ].map(&:reload))
+      .to all(have_attributes(status: "dismissed", resolution_reason: ReviewPolicies::SubjectCheck::REASON_NO_SHARED_WORD))
   end
 
   it "does nothing with fact keywords off or its own toggle off" do

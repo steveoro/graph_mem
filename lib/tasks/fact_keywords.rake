@@ -65,8 +65,10 @@ namespace :graph_mem do
       ReviewPolicies::SubjectCheck::KINDS.each do |kind|
         found = counts[kind]
         pending = found.select { |key, _| key.is_a?(Symbol) }.values.sum
+        # 1.96.1: only a fact_supersede row can share no LLM word (SubjectCheck::REASON_NO_SHARED_WORD).
+        words = kind == "fact_supersede" ? "#{found[ReviewPolicies::SubjectCheck::REASON_NO_SHARED_WORD]} share no LLM word, " : ""
         puts "[fact_keywords] #{kind}: #{pending} pending; #{found[:dismiss]} would be dismissed " \
-             "(#{found[ReviewPolicies::SubjectCheck::REASON]} share no subject, " \
+             "(#{found[ReviewPolicies::SubjectCheck::REASON]} share no subject, #{words}" \
              "#{found[ReviewPolicies::SubjectCheck::REASON_NOT_SAME]} not the same fact, " \
              "#{found[ReviewPolicies::SubjectCheck::REASON_NOT_CONTRADICTION]} no longer a contradiction), " \
              "#{found[:keep]} kept, #{found[:reroute]} to reroute through the fact-supersede judge (the stale scan), " \
