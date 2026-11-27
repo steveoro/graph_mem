@@ -37,7 +37,7 @@ en:
       actions:
         default:
           preview: "Opens a confirm card with what applying changes; nothing is written yet."
-          apply: "Writes the changes listed above; the undo line above says whether Undo can revert them."
+          confirm: "Writes the changes listed above; the undo line above says whether Undo can revert them."
           apply_now: "Applies it now, with no confirm card; Undo in the toast reverts it."
           dismiss: "Not right: nothing changes, and this suggestion isn't made again (Restore brings it back)."
           snooze: "Not now: hidden for %{days} days, then back in the queue at the next policy run."
@@ -62,7 +62,16 @@ en:
         relation_review:
           dismiss: "The relation still holds: nothing changes, and this fact isn't flagged against it again (Restore brings it back)."
         delete_entity:
-          apply: "Deletes the entity as listed above; this can't be undone."
+          confirm: "Deletes the entity as listed above; this can't be undone."
+        # The group cards (ReviewGroupActions): each opens a confirm card listing the rows it takes.
+        group:
+          apply_high: "Opens a confirm card for this group's relationship proposals and stale-memory rows at confidence %{confidence} or more (at most %{cap}); nothing is written yet."
+          open: "Lists this group's suggestions here; nothing is written."
+          dismiss_all: "Opens a confirm card to dismiss this group's pending suggestions (at most %{cap}); nothing is written yet."
+          snooze: "Opens a confirm card to hide this group's pending suggestions for %{days} days; nothing is written yet."
+          confirm_apply: "Applies the suggestions included above, as one change; Undo in the toast reverts it."
+          confirm_dismiss: "Dismisses the suggestions included above: nothing changes in the graph, and they aren't made again (Undo brings them back)."
+          confirm_snooze: "Hides the suggestions included above for %{days} days; the next policy run after that brings them back."
       fact_supersede:
         # 1.96.1: what a "context" guard (FactSupersede::LegacyGuard) means (ReviewHelper#review_guard_hint).
         guard_hint: "%{lead} this observation names a version or an environment that the %{fact} doesn't, or it is a work-log entry (true when written). Old isn't wrong, so Dismiss unless the %{fact} really replaces it."

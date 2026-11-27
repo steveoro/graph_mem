@@ -14,7 +14,7 @@
         - apply_params[:parent_choice] = params[:parent_choice] if row.kind == "relation_retype" && params[:parent_choice].present?
         - if row.kind == "orphan_parent"
           - apply_params[:parent_id] = CompactionReviewApplier.orphan_parent_id(row.effective_payload, params.permit(:parent_id).to_h)
-        = review_action(row, :apply) do |caption_id|
+        = review_action(row, :confirm) do |caption_id|
           = button_to review_apply_label(row.kind), review_row_apply_path(row.row_uuid), class: "ui-btn ui-btn-primary",
             params: apply_params, form: { data: { turbo_frame: "_top" } }, data: { testid: "preview-confirm" }, aria: { describedby: caption_id }
       = review_action(row, :cancel) do |caption_id|

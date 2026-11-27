@@ -45,14 +45,16 @@ module ReviewHelper
   end
 
   # The caption of a Review action (1.96.1): `ui.review.actions.<kind>.<action>`, else
-  # `ui.review.actions.default.<action>`. The list rows use it as a `title`.
+  # `ui.review.actions.default.<action>`. The list rows use it as a `title`; the group cards' actions
+  # are the kind "group".
   #
   #   review_action_caption("fact_supersede", :retire, id: 15)
   #   # => "Opens a confirm card to mark #15 obsolete, with no replacement; Undo brings it back."
   #
-  # @param kind [String] a review row kind
-  # @param action [String, Symbol] preview, apply, apply_now, dismiss, snooze, restore, cancel, save,
-  #   choose, or a kind's own (keep, supersede, retire, confirm_supersede, confirm_retire, move)
+  # @param kind [String] a review row kind, or "group"
+  # @param action [String, Symbol] preview (Apply…), confirm (the confirm card's write), apply_now,
+  #   dismiss, snooze, restore, cancel, save, choose, or a kind's own (keep, supersede, retire,
+  #   confirm_supersede, confirm_retire, move; the group's apply_high, open, dismiss_all, confirm_apply, …)
   # @param values [Hash] the caption's interpolations (id:, other:, parent:, target:); days: defaults
   #   to the snooze length
   # @return [String]
@@ -61,8 +63,8 @@ module ReviewHelper
                                              days: CompactionReviewService::SNOOZE_DAYS, **values)
   end
 
-  # One Review action with its caption under it, tied to the button by `aria-describedby` (1.96.1).
-  # The block renders the button and gets the caption's DOM id.
+  # One Review action of a row with its caption under it, tied to the button by `aria-describedby`
+  # (1.96.1). The block renders the button and gets the caption's DOM id.
   #
   #   = review_action(row, :dismiss) do |caption_id|
   #     = button_to "Dismiss", review_row_dismiss_path(row.row_uuid), class: "ui-btn", aria: { describedby: caption_id }
@@ -74,9 +76,21 @@ module ReviewHelper
   # @yieldparam caption_id [String]
   # @return [ActiveSupport::SafeBuffer]
   def review_action(row, action, suffix: nil, **values, &block)
-    caption_id = [ "review-caption", row.row_uuid, action, suffix ].compact.join("-")
-    caption = tag.p(review_action_caption(row.kind, action, **values), id: caption_id, class: "review-hint review-action__caption",
-                                                                       data: { testid: "review-caption", action: action })
+    review_captioned(row.kind, [ row.row_uuid, action, suffix ], action, **values, &block)
+  end
+
+  # #review_action for any caption: the group cards (kind "group") use it with the group's DOM id.
+  #
+  # @param kind [String] a review row kind, or "group"
+  # @param id_parts [Array<String, Integer, nil>] make the caption's DOM id unique on the page
+  # @param action [String, Symbol] see #review_action_caption
+  # @param values [Hash] the caption's interpolations
+  # @yieldparam caption_id [String]
+  # @return [ActiveSupport::SafeBuffer]
+  def review_captioned(kind, id_parts, action, **values, &block)
+    caption_id = [ "review-caption", *id_parts ].compact.join("-")
+    caption = tag.p(review_action_caption(kind, action, **values), id: caption_id, class: "review-hint review-action__caption",
+                                                                   data: { testid: "review-caption", action: action })
     tag.div(class: "review-action") { safe_join([ capture(caption_id, &block), caption ]) }
   end
 

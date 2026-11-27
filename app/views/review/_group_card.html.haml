@@ -1,6 +1,8 @@
 -# One group (ReviewDigest::Group): a decision on the digest, a line in the grouped lists.
+-# 1.96.1: each action has a caption under it (ReviewHelper#review_captioned, kind "group").
 - dom = review_group_dom_id(group.key)
 - safe = ReviewRowClassifier::SAFE_BULK_KINDS.include?(group.kind) && group.high_confidence.positive?
+- cap = ReviewGroupActions::GROUP_CAP
 %article.ui-card.review-group{ id: dom, data: { review_keys_target: "item", testid: "review-group" } }
   %header.review-group__head
     %span.ui-badge= review_kind_label(group.kind)
@@ -9,11 +11,17 @@
       = render "review/group_meta", group: group
   .review-group__actions
     - if safe
-      = link_to "Apply high-confidence", review_group_preview_path(key: group.key, op: "apply", min_confidence: ReviewDigest::HIGH_CONFIDENCE),
-        class: "ui-btn ui-btn-primary", data: { turbo_frame: "review-detail", review_keys_action: "apply", testid: "group-apply" }
-    = link_to "Review", review_group_path(key: group.key), class: "ui-btn", data: { turbo_frame: "#{dom}-rows", review_keys_action: "open" }
-    = link_to "Dismiss all", review_group_preview_path(key: group.key, op: "dismiss"), class: "ui-btn",
-      data: { turbo_frame: "review-detail", review_keys_action: "dismiss", testid: "group-dismiss" }
-    = link_to "Snooze 30 days", review_group_preview_path(key: group.key, op: "snooze"), class: "ui-btn",
-      data: { turbo_frame: "review-detail", review_keys_action: "snooze", testid: "group-snooze" }
+      = review_captioned("group", [ dom, "apply" ], :apply_high, confidence: ReviewDigest::HIGH_CONFIDENCE, cap: cap) do |caption_id|
+        = link_to "Apply high-confidence", review_group_preview_path(key: group.key, op: "apply", min_confidence: ReviewDigest::HIGH_CONFIDENCE),
+          class: "ui-btn ui-btn-primary", data: { turbo_frame: "review-detail", review_keys_action: "apply", testid: "group-apply" },
+          aria: { describedby: caption_id }
+    = review_captioned("group", [ dom, "open" ], :open) do |caption_id|
+      = link_to "Review", review_group_path(key: group.key), class: "ui-btn", data: { turbo_frame: "#{dom}-rows", review_keys_action: "open" },
+        aria: { describedby: caption_id }
+    = review_captioned("group", [ dom, "dismiss" ], :dismiss_all, cap: cap) do |caption_id|
+      = link_to "Dismiss all", review_group_preview_path(key: group.key, op: "dismiss"), class: "ui-btn",
+        data: { turbo_frame: "review-detail", review_keys_action: "dismiss", testid: "group-dismiss" }, aria: { describedby: caption_id }
+    = review_captioned("group", [ dom, "snooze" ], :snooze) do |caption_id|
+      = link_to "Snooze 30 days", review_group_preview_path(key: group.key, op: "snooze"), class: "ui-btn",
+        data: { turbo_frame: "review-detail", review_keys_action: "snooze", testid: "group-snooze" }, aria: { describedby: caption_id }
   = turbo_frame_tag "#{dom}-rows"

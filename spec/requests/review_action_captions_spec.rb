@@ -3,8 +3,9 @@
 require "rails_helper"
 
 # 1.96.1 (review guidance, item 1): every Review & Fix action says what it does. The detail card, the
-# kind cards' own buttons and the confirm card show a caption under each button, tied to it by
-# aria-describedby; the list rows carry the same text as a title only.
+# kind cards' own buttons, the confirm cards (their writes have their own caption) and the group
+# cards show a caption under each button, tied to it by aria-describedby; the list rows carry the
+# same text as a title only. Every .ui-btn of those cards is checked, so a new button needs one.
 RSpec.describe "Review & Fix › action captions", type: :request do
   let!(:project) { fs_project!("SynthApp") }
   let!(:widget) { fs_member!(project, "SynthWidget") }
@@ -105,18 +106,20 @@ RSpec.describe "Review & Fix › action captions", type: :request do
       "relation_retype (swap)" => seed(swap.except(:id)), "relation_retype (add)" => seed(add.except(:id)) }
   end
 
-  # @return [Array<Array(String, String)>] each action button of the card, [label, caption]; fails on a button without one
+  # @return [Array<Array(String, String)>] each action button of every card with that testid, [label,
+  #   caption]; fails on a button without a caption
   def captions(testid, name)
-    doc = Nokogiri::HTML5(response.body)
-    card = doc.at_css("[data-testid='#{testid}']")
-    expect(card).to be_present, "#{name}: no #{testid}"
-    card.css("a.ui-btn, button.ui-btn, input.ui-btn").map do |button|
-      label = (button.text.presence || button["value"]).to_s.squish
-      caption = button["aria-describedby"] && doc.at_css("[id='#{button['aria-describedby']}']")
-      expect(caption).to be_present, "#{name}: '#{label}' has no caption"
-      expect(caption.at_css(".translation_missing")).to be_nil, "#{name}: '#{label}' has a missing caption"
-      expect(caption.text.squish).to be_present
-      [ label, caption.text.squish ]
+    cards = Nokogiri::HTML5(response.body).css("[data-testid='#{testid}']")
+    expect(cards).to be_present, "#{name}: no #{testid}"
+    cards.flat_map do |card|
+      card.css("a.ui-btn, button.ui-btn, input.ui-btn").map do |button|
+        label = (button.text.presence || button["value"]).to_s.squish
+        caption = button["aria-describedby"] && card.at_css("[id='#{button['aria-describedby']}']")
+        expect(caption).to be_present, "#{name}: '#{label}' has no caption"
+        expect(caption.at_css(".translation_missing")).to be_nil, "#{name}: '#{label}' has a missing caption"
+        expect(caption.text.squish).to be_present
+        [ label, caption.text.squish ]
+      end
     end
   end
 
@@ -212,6 +215,33 @@ RSpec.describe "Review & Fix › action captions", type: :request do
     expect(captions("review-detail-card", "relation_review").to_h).to include(
       "Dismiss" => "The relation still holds: nothing changes, and this fact isn't flagged against it again (Restore brings it back)."
     )
+  end
+
+  it "captions the group cards' actions and the group confirm cards" do
+    rows = seed_every_kind
+    %w[attention kind errors scan].each do |view|
+      get review_path(view: view)
+      captions("review-group", view) if response.body.include?("data-testid=\"review-group\"")
+    end
+    get review_path(view: "kind")
+    expect(captions("review-group", "kind").to_h).to include(
+      "Apply high-confidence" => "Opens a confirm card for this group's relationship proposals and stale-memory rows at confidence 0.8 " \
+                                 "or more (at most 100); nothing is written yet.",
+      "Review" => "Lists this group's suggestions here; nothing is written.",
+      "Dismiss all" => "Opens a confirm card to dismiss this group's pending suggestions (at most 100); nothing is written yet.",
+      "Snooze 30 days" => "Opens a confirm card to hide this group's pending suggestions for 30 days; nothing is written yet."
+    )
+
+    key = rows.fetch("relationship_proposal").group_key
+    {
+      "apply" => [ "Apply", "Applies the suggestions included above, as one change; Undo in the toast reverts it." ],
+      "dismiss" => [ "Dismiss", "Dismisses the suggestions included above: nothing changes in the graph, and they aren't made again " \
+                                "(Undo brings them back)." ],
+      "snooze" => [ "Snooze 30 days", "Hides the suggestions included above for 30 days; the next policy run after that brings them back." ]
+    }.each do |op, caption|
+      get review_group_preview_path(key: key, op: op, min_confidence: (ReviewDigest::HIGH_CONFIDENCE if op == "apply"))
+      expect(captions("group-preview-card", op)).to eq([ caption ])
+    end
   end
 
   it "captions Restore on a resolved row, in the card and as the resolved list's title" do
