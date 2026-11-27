@@ -128,7 +128,59 @@ RSpec.describe "bin/docker-entrypoint" do
     end
   end
 
+  describe "configuration errors: one line on stderr, exit 1, rails never runs, nothing generated" do
+    wrong_key_message = "RAILS_MASTER_KEY doesn't match config/credentials.yml.enc: fix the key in .env, " \
+                        "or remove the key and the file to boot without credentials (docs/quick_setup.md)"
+
+    define_method(:expect_refused) do |result, message|
+      stdout, stderr, status = result
+      expect(status.exitstatus).to eq(1)
+      expect(stdout).to be_empty
+      expect(stderr).to eq("#{message}\n")
+      expect(rails_calls).to be_empty
+      expect(File.exist?(path("storage/secret_key_base"))).to be(false)
+    end
+
+    it "names the fix for a RAILS_MASTER_KEY that doesn't decrypt the credentials" do
+      right_key = write_credentials
+      wrong_key = ActiveSupport::EncryptedFile.generate_key
+      result = run_entrypoint(env: { "RAILS_MASTER_KEY" => wrong_key, "SECRET_KEY_BASE" => SecureRandom.hex(64) })
+
+      expect_refused(result, wrong_key_message)
+      expect([ right_key, wrong_key ].any? { |key| result[1].include?(key) }).to be(false)
+    end
+
+    it "says the same for a key of the wrong length" do
+      write_credentials
+
+      expect_refused(run_entrypoint(env: { "RAILS_MASTER_KEY" => SecureRandom.hex(32) }), wrong_key_message)
+    end
+
+    it "names the fix when RAILS_MASTER_KEY is set but the credentials file is missing" do
+      expect_refused(run_entrypoint(env: { "RAILS_MASTER_KEY" => ActiveSupport::EncryptedFile.generate_key }),
+                     "RAILS_MASTER_KEY is set but config/credentials.yml.enc is missing: put the file back in config/ " \
+                     "and rebuild, or remove RAILS_MASTER_KEY from .env to boot without credentials (docs/quick_setup.md)")
+    end
+
+    it "boots without the credentials file when SECRET_KEY_BASE is set too" do
+      _stdout, stderr, status = run_entrypoint(env: { "RAILS_MASTER_KEY" => ActiveSupport::EncryptedFile.generate_key,
+                                                      "SECRET_KEY_BASE" => SecureRandom.hex(64) })
+
+      expect(status).to be_success, stderr
+      expect(rails_calls.last).to eq("rails server key_length=128 key_set=yes")
+    end
+
+    it "names the fix for a missing config/database.yml" do
+      File.delete(path("config/database.yml"))
+
+      expect_refused(run_entrypoint,
+                     "config/database.yml is missing: cp config/database.example.yml config/database.yml, " \
+                     "then docker compose down && bin/up --build (docs/troubleshooting.md)")
+    end
+  end
+
   it "runs no preflight for a command other than the server" do
+    File.delete(path("config/database.yml"))
     _stdout, stderr, status = run_entrypoint(command: %w[./bin/rails runner true])
 
     expect(status).to be_success, stderr

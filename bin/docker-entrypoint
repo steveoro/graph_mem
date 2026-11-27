@@ -16,8 +16,6 @@ GENERATED_KEY_FILE=storage/secret_key_base
 # nothing: Rails takes SECRET_KEY_BASE, or the credentials' secret_key_base, as before. The key is
 # never printed.
 prepare_secret_key_base() {
-  # compose passes SECRET_KEY_BASE="" when .env has none, and Rails would take "" as an invalid key.
-  [ -n "${SECRET_KEY_BASE:-}" ] || unset SECRET_KEY_BASE
   if [ -n "${SECRET_KEY_BASE:-}" ] || [ -n "${RAILS_MASTER_KEY:-}" ] || [ -f config/master.key ]; then
     return 0
   fi
@@ -33,9 +31,56 @@ prepare_secret_key_base() {
   export SECRET_KEY_BASE
 }
 
+# A configuration error that booting can't fix: print one line with the fix and stop. The container
+# restarts (restart: unless-stopped) and every restart logs the same line, not a stack trace.
+fail() {
+  echo "$*" >&2
+  exit 1
+}
+
+# Decrypts config/credentials.yml.enc with RAILS_MASTER_KEY without booting the app: a boot would die
+# on the same error with a stack trace. Exits 3 when the key doesn't fit the file (a wrong key, or
+# one of the wrong length); any other error is left for Rails to report.
+check_master_key() {
+  bundle exec ruby -e '
+    require "active_support"
+    require "active_support/encrypted_configuration"
+    begin
+      ActiveSupport::EncryptedConfiguration.new(
+        config_path: "config/credentials.yml.enc", key_path: "config/master.key",
+        env_key: "RAILS_MASTER_KEY", raise_if_missing_key: false
+      ).read
+    rescue ActiveSupport::MessageEncryptor::InvalidMessage, ArgumentError
+      exit 3
+    end'
+}
+
+check_configuration() {
+  [ -f config/database.yml ] ||
+    fail "config/database.yml is missing: cp config/database.example.yml config/database.yml, then docker compose down && bin/up --build (docs/troubleshooting.md)"
+
+  [ -n "${RAILS_MASTER_KEY:-}" ] || return 0
+  if [ -f config/credentials.yml.enc ]; then
+    local status=0
+    check_master_key || status=$?
+    [ "$status" -ne 3 ] ||
+      fail "RAILS_MASTER_KEY doesn't match config/credentials.yml.enc: fix the key in .env, or remove the key and the file to boot without credentials (docs/quick_setup.md)"
+  elif [ -z "${SECRET_KEY_BASE:-}" ]; then
+    # Rails would stop on "Missing secret_key_base": the key has no file to give it one.
+    fail "RAILS_MASTER_KEY is set but config/credentials.yml.enc is missing: put the file back in config/ and rebuild, or remove RAILS_MASTER_KEY from .env to boot without credentials (docs/quick_setup.md)"
+  fi
+}
+
+preflight() {
+  # compose passes SECRET_KEY_BASE="" when .env has none, and Rails would take "" as an invalid key.
+  [ -n "${SECRET_KEY_BASE:-}" ] || unset SECRET_KEY_BASE
+  check_configuration
+  prepare_secret_key_base
+}
+
 # If running the rails server then create or migrate existing database
 if [ "$1" == "./bin/rails" ] && [ "$2" == "server" ]; then
-  prepare_secret_key_base
+  preflight
   ./bin/rails db:prepare
   ./bin/rails db:support:initialize
 fi
