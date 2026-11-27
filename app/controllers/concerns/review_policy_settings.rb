@@ -6,7 +6,8 @@
 module ReviewPolicySettings
   extend ActiveSupport::Concern
 
-  KEYS = (AppSettings::REVIEW_POLICY_TOGGLES.values.map(&:first) + AppSettings::REVIEW_FLAGS.keys + AppSettings::REVIEW_NUMBERS.keys).freeze
+  KEYS = (AppSettings::REVIEW_POLICY_TOGGLES.values.map(&:first) + AppSettings::REVIEW_FLAGS.keys + AppSettings::REVIEW_NUMBERS.keys +
+          AppSettings::REVIEW_STRINGS.keys).freeze
 
   private
 

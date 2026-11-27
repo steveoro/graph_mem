@@ -58,6 +58,19 @@ en:
         has_parent: "%{child} is already part_of %{parent}: choose to move it under this row's target, or to keep its parent."
         move: "Move under %{target}…"
         keep: "Keep %{parent}…"
+      relation_retype_dependency:
+        operation:
+          swap: "Swap: part_of becomes the project's depends_on"
+          add: "Add: the project's depends_on for an orphan"
+        swap_endpoints: "'%{library}' part_of '%{project}' becomes '%{project}' depends_on '%{library}': the project uses it rather than owns it."
+        add_endpoints: "'%{entity}' has no parent: '%{project}' depends_on '%{entity}' is proposed instead of a part_of."
+        gone: "The part_of relation #%{id} is gone."
+        no_scope_change: "No scope change: %{entity} keeps its scope."
+        evidence: "Evidence"
+        entity_type: "Type: %{type} (a dependency-like type, Settings › Review policies)"
+        match: "Best project match: score %{score} (tokens: %{tokens})"
+        fact: "#%{id} on %{entity}: %{content}"
+        no_facts: "No fact of %{project} says it uses this entity."
     guest_search_throttled:
       title: "Too many searches"
       body: "Guests can run up to %{limit} searches a minute. Please wait a moment and try again."

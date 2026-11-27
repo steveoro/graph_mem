@@ -25,6 +25,7 @@ en:
         out_of_range: "%{setting} must be between %{min} and %{max} (got %{value}). Nothing was saved."
         snooze_expiry: "Snoozed suggestions always come back when their snooze ends (no toggle)."
         runs_link: "See the policy runs (with Undo) on Review › Policies"
+        invalid_dependency_like_types: "Dependency-like entity types not saved: %{entries} (each entry is a type name of letters, digits, spaces, dots, dashes or underscores, up to 64 characters, not Project; at most 20)."
         policies:
           dangling: "Dismisses suggestions that point at something deleted, or whose effect already holds. No suppression. Reverse: Undo the run, or Restore the row."
           no_shared_subject: "Dismisses contradiction and \"Outdated by a fact\" suggestions whose two facts share no subject, or (unjudged ones, and contradictions) aren't the same fact, by their keyword paths (needs Fact keywords on). A judged suggestion is dismissed only when its facts share no subject. No suppression. Reverse: Undo the run, or Restore the row."
@@ -35,6 +36,7 @@ en:
           auto_apply_expired_validity: "Marks observations obsolete when their own valid_until has passed, at most 100 per run. Reverse: Undo the run."
           auto_apply_fact_supersede: "Applies \"Outdated by a fact\" suggestions the judge marked superseded at or above the confidence below, only for facts an operator marked, never with a guard or for an entity outside the project, at most 100 per run. Reverse: Undo the run."
           auto_apply_contradiction: "On by default. Resolves a contradiction that is a plain value change: two facts of one entity, with the same source and perspective, that are one \"Key: value\" line each with the same key and one changed value (\"Port: 3000\", later \"Port: 3001\"). The older fact is marked superseded by the newer one; nothing is deleted. Different keys, a changed unit, lists and ties on the dates are never applied, at most 100 per run. Reverse: Undo the run; the pair then stays in the queue for you and isn't applied again. Turn it off to review these by hand."
+          auto_apply_relation_retype: "Off by default. Applies dream state's relation_retype swap rows: an entity of a dependency-like type (the list below) that is part_of a Project becomes the Project's depends_on, so it and its own part_of children leave the project's scope (they become global). Never a retype or an add row. A row is left for you when its entity is no longer of a dependency-like type, or when the project has a fact naming the entity with an ownership phrase: \"part of this project\", \"our own\", \"maintained here\", \"vendored\" or \"forked\". A name already taken in the global scope skips the row (the swap queues a merge suggestion when the two have one type). At most 100 per run. Reverse: Undo the run (the part_of and the project scope come back)."
       mcp_access:
         intro: "Who may reach /mcp (and bearer requests on /api/v1): allowed client IPs, Host names and browser origins. Each list adds to its ENV value, which is shown first and can't be removed here. Changes apply without a restart."
         sessions_notice_title: "Saving a change to allowed hosts or origins closes every open MCP session."
@@ -243,6 +245,8 @@ en:
           label: "Auto-apply source fact supersedes"
         enable_auto_apply_contradiction:
           label: "Auto-resolve value changes"
+        enable_auto_apply_relation_retype:
+          label: "Auto-apply dependency swaps (part_of to depends_on)"
         auto_apply_contradiction_free_text:
           label: "Auto-resolve value changes in free text"
           description: "Off by default. Also resolve two sentences that differ only in one or two values (\"listens on port 3000\" / \"listens on port 3001\"), within the two limits below. Needs \"Auto-resolve value changes\" on."
@@ -252,6 +256,9 @@ en:
         auto_apply_contradiction_max_tokens:
           label: "Free-text value change: changed values"
           description: "How many values may differ between two free-text facts (1 or 2). Free text only."
+        dependency_like_types:
+          label: "Dependency-like entity types"
+          description: "The entity types a project uses rather than owns, separated by commas (default: Framework, Gem, Tool, SoftwareLibrary, TestFramework). A type matches by its canonical type, case-insensitively, so library, lib, rubygem and tools match too; Project never does. Dream state queues a review row (relation_retype, swap) to turn such an entity's part_of a Project into Project depends_on it, which moves it and its own part_of children to the global scope; an orphan of such a type gets a Project depends_on suggestion (add) instead of a parent; and a project scan links a global entity of such a type (depends_on, its facts on it) instead of making a project copy. Blank turns all three off."
         auto_apply_fact_supersede_min_confidence:
           label: "Auto-apply source fact confidence"
           description: "Minimum judge confidence for auto-applying an \"Outdated by a fact\" suggestion."

@@ -6,8 +6,10 @@ class CompactionReviewApplier
   # `operation`, `relation_id`, `from_entity_id`, `from_name`, `to_entity_id`, `to_name`,
   # `old_type`, `new_type`, `reason`.
   #
-  # `operation` is "retype" in this release (same endpoints, the variant becomes `new_type`); R1b
-  # adds "swap" and "add", so an unknown operation is refused as a validation error.
+  # `operation` is "retype" here (same endpoints, the variant becomes `new_type`); R1b's "swap" and
+  # "add" (a library's part_of becoming the Project's depends_on, and a depends_on for an orphan)
+  # are RelationRetypeDependency's, which adds the `evidence` key. Another operation is refused as
+  # a validation error.
   #
   # Retype runs under the membership lock (CompactionReviewService.apply takes it before the row's
   # transaction; taken again here, reentrant, as the other part_of writers do) in a savepoint: the
@@ -24,7 +26,7 @@ class CompactionReviewApplier
   #   RelationRetype.apply({ operation: "retype", relation_id: 41, new_type: "part_of", … })
   #   # => { success: true, message: "Relation #41 'child_of' replaced by part_of #57" }
   module RelationRetype
-    OPERATIONS = %w[retype].freeze
+    OPERATIONS = %w[retype swap add].freeze
     DELETION_REASON = "relation type canonicalized: replaced through review"
 
     module_function
@@ -36,6 +38,7 @@ class CompactionReviewApplier
     def apply(effective, action_params = {})
       problem = operation_problem(effective)
       return { success: false, error: problem } if problem
+      return RelationRetypeDependency.apply(effective) if dependency_operation?(effective)
 
       relation = MemoryRelation.lock.find_by(id: effective[:relation_id].to_i)
       stale = stale_reason(relation, effective)
@@ -55,6 +58,7 @@ class CompactionReviewApplier
     def preview(effective, action_params = {})
       problem = operation_problem(effective)
       return Preview.result(false, warnings: [ problem ]) if problem
+      return RelationRetypeDependency.preview(effective) if dependency_operation?(effective)
 
       relation = MemoryRelation.find_by(id: effective[:relation_id].to_i)
       stale = stale_reason(relation, effective)
@@ -85,8 +89,10 @@ class CompactionReviewApplier
     # @return [Integer, nil]
     def choice_parent_id(effective)
       effective = effective.to_h.with_indifferent_access
+      return nil if operation_problem(effective) || dependency_operation?(effective)
+
       relation = MemoryRelation.find_by(id: effective[:relation_id].to_i)
-      return nil if operation_problem(effective) || stale_reason(relation, effective)
+      return nil if stale_reason(relation, effective)
 
       parent_choice_needed(relation, effective)
     end
@@ -96,7 +102,12 @@ class CompactionReviewApplier
       operation = effective[:operation].to_s
       return nil if OPERATIONS.include?(operation)
 
-      "Invalid relation_retype operation '#{operation}': only #{OPERATIONS.join(', ')} can be applied in this release"
+      "Invalid relation_retype operation '#{operation}': only #{OPERATIONS.to_sentence(last_word_connector: ' and ')} can be applied"
+    end
+
+    # @return [Boolean] a "swap" or "add" row (RelationRetypeDependency)
+    def dependency_operation?(effective)
+      RelationRetypeDependency::OPERATIONS.include?(effective[:operation].to_s)
     end
 
     # @return [Hash, nil] the answer for a row that no longer needs (or allows) the retype, nil when it applies

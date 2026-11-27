@@ -66,12 +66,13 @@ class ReviewRowClassifier
       endpoints ? pair(kind, endpoints, row_uuid) : [ "#{kind}|row:#{row_uuid}", nil ]
     end
 
+    # R1b's "add" row runs from the Project to the entity: the anchor is the entity (to).
     def retype_pair(kind, payload, row_uuid)
       from_id = integer(field(payload, :from_entity_id))
       to_id = integer(field(payload, :to_entity_id))
       return relation_pair(kind, payload, row_uuid) unless from_id && to_id
 
-      [ "#{kind}|#{[ from_id, to_id ].sort.join('-')}", from_id ]
+      [ "#{kind}|#{[ from_id, to_id ].sort.join('-')}", field(payload, :operation) == "add" ? to_id : from_id ]
     end
 
     def observation_owner(kind, payload, row_uuid)

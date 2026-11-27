@@ -7,6 +7,7 @@ en:
         write: "API write"
       compaction:
         auto_merge: "Compaction auto-merge"
+        auto_parent: "Compaction auto-parent"
       dream:
         relation_types: "Relation types canonicalized"
       maintenance:

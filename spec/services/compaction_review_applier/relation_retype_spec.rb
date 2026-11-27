@@ -102,14 +102,14 @@ RSpec.describe CompactionReviewApplier::RelationRetype do
     expect(apply(gone_row)).to include(success: false, error: "Cannot retype relation ##{gone.id}: it no longer exists; dismiss this row")
   end
 
-  it "refuses an operation this release can't apply" do
+  it "refuses an operation it doesn't know (R1b added swap and add)" do
     _variant, row = queued_row
-    row.update_column(:payload, row.payload.merge("operation" => "swap"))
+    row.update_column(:payload, row.payload.merge("operation" => "move"))
 
     result = apply(row)
 
     expect(result).to include(success: false)
-    expect(result[:error]).to eq("Invalid relation_retype operation 'swap': only retype can be applied in this release")
+    expect(result[:error]).to eq("Invalid relation_retype operation 'move': only retype, swap and add can be applied")
     expect(CompactionReviewApplier.preview(row.reload)).to include(ok: false, warnings: [ result[:error] ])
   end
 

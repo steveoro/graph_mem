@@ -212,6 +212,7 @@ class ProjectScanner
   include FactDedupe
   include Containment
   include MembershipSync
+  include GlobalDependencies
 
   # Files the scan skipped because they left the root or are denylisted (ProjectScanFileFilter).
   def skip_counters
@@ -457,6 +458,8 @@ class ProjectScanner
     entity = find_or_create_entity(name, type, entity_data)
     return unless entity
 
+    link_dependency!(entity) if global_dependency?(entity) # R1b: the project uses it (GlobalDependencies)
+
     @entities_by_path[name.downcase] = entity
     @entities_by_path["#{name.downcase}:#{type.downcase}"] = entity
 
@@ -465,8 +468,10 @@ class ProjectScanner
 
   # A name is unique in a project whatever its type or case (MemoryEntity), so an item the model
   # typed differently in another part, or in an earlier scan, is that same entity: its type stays.
+  # R1b: with no such entity, an item of a dependency-like type is the global namesake of a
+  # dependency-like type, if one exists (GlobalDependencies).
   def find_or_create_entity(name, type, entity_data)
-    existing = MemoryEntity.find_by(name: name, project_id: @project_entity&.id)
+    existing = MemoryEntity.find_by(name: name, project_id: @project_entity&.id) || global_dependency(name, type)
     if existing
       # Visible, not prevented: the model typed a stored entity differently (reported in the
       # `[scan]` line and the result's type_mismatches).
@@ -522,7 +527,7 @@ class ProjectScanner
       fact = MemoryObservation.create!(
         memory_entity: entity,
         content: text,
-        source: scan_source("reconcile"),
+        source: fact_source_for(entity),
         confidence: 0.9
       )
       store_scan_llm_words(fact, entity, text)
@@ -544,7 +549,8 @@ class ProjectScanner
     return if from_entity.id == target.id
 
     relation_type = MemoryRelation.canonical_relation_type(relation_type)
-    return if part_of_another_root?(target, relation_type) || relation_exists?(from_entity, target, relation_type)
+    return if part_of_another_root?(target, relation_type) || dependency_part_of?(from_entity, target, relation_type)
+    return if relation_exists?(from_entity, target, relation_type)
 
     return if @dry_run
 
@@ -597,6 +603,7 @@ class ProjectScanner
 
     project_entity_ids = ProjectSubtree.resolve(@project_entity.id).entity_ids
     scanned_ids = @entities_by_path.values.map(&:id).uniq
+    mark_missing_dependencies(scanned_ids) # R1b: this project's facts on a global library it no longer names
 
     missing_ids = project_entity_ids - scanned_ids - [ @project_entity.id ]
     return if missing_ids.empty?

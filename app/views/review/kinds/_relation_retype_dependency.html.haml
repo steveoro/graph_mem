@@ -1,0 +1,35 @@
+-# A relation_retype row of R1b: "swap" (a dependency-like entity's part_of a Project becomes the
+-# Project's depends_on it, and the entity leaves the project's scope) or "add" (a depends_on for a
+-# dependency-like orphan). Endpoints and scope are read live; the effects card under it says what
+-# Apply does (CompactionReviewApplier::RelationRetypeDependency).
+- scope = "ui.review.relation_retype_dependency"
+- swap = payload["operation"] == CompactionReviewApplier::RelationRetypeDependency::SWAP
+- ids = [ payload["from_entity_id"], payload["to_entity_id"] ].compact.map(&:to_i)
+- entities = MemoryEntity.where(id: ids).index_by(&:id)
+- from = entities[payload["from_entity_id"].to_i]
+- to = entities[payload["to_entity_id"].to_i]
+- from_name = from&.name || payload["from_name"]
+- to_name = to&.name || payload["to_name"]
+- evidence = payload["evidence"].is_a?(Hash) ? payload["evidence"] : {}
+%p{ data: { testid: "relation-retype-operation" } }
+  %strong= t("#{scope}.operation.#{swap ? 'swap' : 'add'}")
+- if swap
+  %p{ data: { testid: "relation-retype-endpoints" } }= t("#{scope}.swap_endpoints", library: from_name, project: to_name)
+  - relation = MemoryRelation.find_by(id: payload["relation_id"].to_i)
+  - if relation.nil?
+    %p.review-warning= t("#{scope}.gone", id: payload["relation_id"])
+  - elsif from
+    %p{ data: { testid: "relation-retype-scope" } }= CompactionReviewApplier::RelationRetypeDependency.scope_effect(from, from.project_id)
+- else
+  %p{ data: { testid: "relation-retype-endpoints" } }= t("#{scope}.add_endpoints", entity: to_name, project: from_name)
+  %p{ data: { testid: "relation-retype-scope" } }= t("#{scope}.no_scope_change", entity: to_name)
+%h4= t("#{scope}.evidence")
+%ul{ data: { testid: "relation-retype-evidence" } }
+  %li= t("#{scope}.entity_type", type: evidence["entity_type"] || (swap ? from : to)&.entity_type)
+  - if evidence.key?("score")
+    %li= t("#{scope}.match", score: evidence["score"], tokens: Array(evidence["matched_tokens"]).join(", "))
+  - Array(evidence["facts"]).each do |fact|
+    - next unless fact.is_a?(Hash)
+    %li{ data: { testid: "relation-retype-fact" } }= t("#{scope}.fact", id: fact["observation_id"], entity: fact["entity_name"], content: fact["content"])
+  - if swap && Array(evidence["facts"]).empty?
+    %li= t("#{scope}.no_facts", project: to_name)

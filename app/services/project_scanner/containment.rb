@@ -5,7 +5,8 @@ class ProjectScanner
   # instance variables). Every entity a scan reconciles is stamped into the scanned project, so it
   # must also hang on that project's part_of tree: after the relations pass, each reconciled entity
   # still without a part_of parent gets one to the project root, as SkeletonWriter#ensure_parent
-  # does for the code map. A parent the model emitted is kept.
+  # does for the code map. A parent the model emitted is kept. A global library the scan resolved an
+  # item to (GlobalDependencies) is not the scan's own entity: it gets no edge.
   #
   # The edge is marked like the skeleton writer's (`properties.source`, `properties.scan_id`), with
   # the CONTAINMENT_PHASE source, so a tool can tell a scanner-made containment edge from a
@@ -28,6 +29,7 @@ class ProjectScanner
 
       entities.uniq(&:id).each do |entity|
         next if entity.id == @project_entity.id || entity.entity_type == NodeOperationsStrategy::PROJECT_ENTITY_TYPE
+        next if global_dependency?(entity) # R1b: a global library the project depends_on (GlobalDependencies)
         next if MemoryRelation.exists?(from_entity_id: entity.id, relation_type: "part_of")
 
         MemoryRelation.create!(from_entity_id: entity.id, to_entity_id: @project_entity.id, relation_type: "part_of",

@@ -61,10 +61,32 @@ module ReviewPolicies
 
     # R1a: the relation is gone, already the new type, has a twin of the new type (the next sweep
     # merges into it), or its stored type no longer maps to the new type (a mapping changed).
-    # Only "retype" rows; R1b's operations bring their own checks.
-    def relation_retype_reason(_payload, field)
-      return nil unless field.call("operation").to_s == "retype"
+    # R1b: a "swap" row whose part_of is gone or no longer part_of, an "add" row whose endpoint is
+    # gone or whose depends_on exists.
+    def relation_retype_reason(payload, field)
+      case field.call("operation").to_s
+      when "retype" then relation_retype_retype_reason(payload, field)
+      when CompactionReviewApplier::RelationRetypeDependency::SWAP then relation_retype_swap_reason(field)
+      when CompactionReviewApplier::RelationRetypeDependency::ADD then relation_retype_add_reason(field)
+      end
+    end
 
+    def relation_retype_swap_reason(field)
+      relation = MemoryRelation.find_by(id: field.call("relation_id"))
+      return "relation ##{field.call('relation_id')} gone" unless relation
+
+      "relation ##{relation.id} is no longer part_of" unless MemoryRelation.reads_as_part_of?(relation.relation_type)
+    end
+
+    def relation_retype_add_reason(field)
+      from = field.call("from_entity_id")
+      to = field.call("to_entity_id")
+      gone_entity(from, to) ||
+        ("relation already exists" if MemoryRelation.exists?(from_entity_id: from, to_entity_id: to,
+                                                             relation_type: CompactionReviewApplier::RelationRetypeDependency::NEW_TYPE))
+    end
+
+    def relation_retype_retype_reason(_payload, field)
       relation = MemoryRelation.find_by(id: field.call("relation_id"))
       return "relation ##{field.call('relation_id')} gone" unless relation
 

@@ -139,6 +139,13 @@ class AppSettings < RailsSettings::Base
         validates: { numericality: { greater_than_or_equal_to: 0.02, less_than_or_equal_to: 0.15 } }
   field :auto_apply_contradiction_max_tokens, default: 2, type: :integer,
         validates: { numericality: { greater_than_or_equal_to: 1, less_than_or_equal_to: 2 } }
+  # Dream State R1b (ReviewPolicies::AutoApplyRelationRetype): applies relation_retype "swap" rows
+  # with no ownership signal. Off by default.
+  field :enable_auto_apply_relation_retype, default: false, type: :boolean
+  # Dream State R1b: the entity types a project uses rather than owns (DependencyLikeTypes), a
+  # comma-separated list matched by canonical type. Blank: none.
+  DEPENDENCY_LIKE_TYPES_DEFAULT = "Framework, Gem, Tool, SoftwareLibrary, TestFramework"
+  field :dependency_like_types, default: DEPENDENCY_LIKE_TYPES_DEFAULT, type: :string
 
   # Default and accepted range of each numeric review setting.
   REVIEW_NUMBERS = {
@@ -153,6 +160,8 @@ class AppSettings < RailsSettings::Base
   }.freeze
   # Boolean review settings that aren't a policy's own toggle, with their defaults.
   REVIEW_FLAGS = { "auto_apply_contradiction_free_text" => false }.freeze
+  # String review settings, with their defaults (Settings › Review policies).
+  REVIEW_STRINGS = { "dependency_like_types" => DEPENDENCY_LIKE_TYPES_DEFAULT }.freeze
   # Each review policy's toggle and its default (snooze_expiry always runs).
   REVIEW_POLICY_TOGGLES = {
     "dangling" => [ "enable_review_policy_dangling", true ],
@@ -163,7 +172,8 @@ class AppSettings < RailsSettings::Base
     "auto_apply_relationships" => [ "enable_auto_apply_relationships", false ],
     "auto_apply_expired_validity" => [ "enable_auto_apply_expired_validity", false ],
     "auto_apply_fact_supersede" => [ "enable_auto_apply_fact_supersede", false ],
-    "auto_apply_contradiction" => [ "enable_auto_apply_contradiction", true ]
+    "auto_apply_contradiction" => [ "enable_auto_apply_contradiction", true ],
+    "auto_apply_relation_retype" => [ "enable_auto_apply_relation_retype", false ]
   }.freeze
 
   # MCP tool invocation retention (zero disables automatic pruning)
@@ -340,6 +350,16 @@ class AppSettings < RailsSettings::Base
   # @return [Boolean]
   def self.review_flag?(name)
     read_boolean_setting(name.to_s, default: REVIEW_FLAGS.fetch(name.to_s))
+  end
+
+  # Uncached read of the dependency-like types list (DependencyLikeTypes.current): every process
+  # (Puma, Solid Queue) sees a change on its next call.
+  # @return [String] the stored comma-separated list, the default when unset ("" means none)
+  def self.dependency_like_types_list
+    raw = connection.select_value(sanitize_sql([ "SELECT value FROM #{table_name} WHERE var = ?", "dependency_like_types" ]))
+    raw.nil? ? DEPENDENCY_LIKE_TYPES_DEFAULT : YAML.safe_load(raw.to_s).to_s
+  rescue StandardError
+    DEPENDENCY_LIKE_TYPES_DEFAULT
   end
 
   # Uncached read of a numeric review setting, clamped to its range (a value written outside the

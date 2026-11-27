@@ -4,11 +4,13 @@ class CompactionRun < ApplicationRecord
   belongs_to :operation_progress, optional: true
 
   STATUSES = %w[idle running paused completed failed].freeze
-  # `relation_types` (R1a) runs first and walks relation ids (RelationTypeSweep), the others walk
-  # entities. A run created before it existed keeps its phase and simply never visits it.
-  PHASES = %w[relation_types orphans tree_walk relationship_discovery].freeze
+  # `relation_types` (R1a) runs first and walks relation ids (RelationTypeSweep), then
+  # `dependency_edges` (R1b) walks the dependency-like part_of edges to Projects (it only queues
+  # review rows); the others walk entities. A run created before a phase existed keeps its phase
+  # and simply never visits the ones before it.
+  PHASES = %w[relation_types dependency_edges orphans tree_walk relationship_discovery].freeze
   # The phases that walk entities: progress totals count entities once per such phase.
-  ENTITY_PHASES = (PHASES - %w[relation_types]).freeze
+  ENTITY_PHASES = (PHASES - %w[relation_types dependency_edges]).freeze
 
   serialize :stats, coder: JSON
 

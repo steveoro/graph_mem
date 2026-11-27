@@ -101,6 +101,15 @@ class SettingsSchema
       [ nil, ScanRootPolicy::Subfolders.join(entries.map { |entry| entry[:path] }) ]
     end
 
+    # Dream State R1b: a comma-separated list of entity types (DependencyLikeTypes.check), stored
+    # normalized ("Framework, Gem, Tool"); blank is allowed (no type is dependency-like).
+    def dependency_like_types(raw)
+      return [ nil, raw ] if raw.nil?
+
+      refused, value = DependencyLikeTypes.check(raw)
+      [ (I18n.t("system.settings.review_policies.invalid_dependency_like_types", entries: refused.join(", ")) if refused.any?), value ]
+    end
+
     def blank_or_http_url?(raw)
       url = raw.to_s.strip
       return true if url.blank?
