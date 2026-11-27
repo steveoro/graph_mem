@@ -189,7 +189,7 @@ RSpec.describe "graph_mem-sql: staged values the models would refuse" do
   end
 
   describe "the source-fact rules of MemoryObservation (after the merge, on a new row or a changed field)" do
-    # The writer leaves that tag out (1.95.0, SqlExport::Writer#tags_for), so the file is edited to carry it.
+    # The writer leaves that tag out (1.96.0, SqlExport::Writer#tags_for), so the file is edited to carry it.
     it "refuses a source-fact tag on an entity outside a project on a new row, not on a matched row it leaves as it is" do
       global = MemoryEntity.create!(name: "SynthNotes", entity_type: "Preference")
       fs_observe!(global, "Synth notes are kept here.").update_columns(tags: [ SourceFact::SOURCE_FACT_TAG ]) # a fact whose entity left its project

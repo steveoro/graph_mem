@@ -2,7 +2,7 @@
 
 > Status: **in progress. Steve said go on 2026-11-25; steps 0 and 1 are done in PRs A and B, released
 > as 1.93.5** (see "As built (PR A)" under step 0 and "As built (PR B)" under step 1); steps 2-4 (PRs C,
-> E, D, 1.97.0) come after Dream State R2. Decisions taken by Steve on 2026-11-20 and 2026-11-24 (see
+> E, D, 1.98.0) come after Dream State R2. Decisions taken by Steve on 2026-11-20 and 2026-11-24 (see
 > the two "Decisions" sections). Written against `main` at `c546109` (merge of #188, Dream State R1a,
 > **1.93.0**). Each kickoff rechecks its own line references against `main`.
 >
@@ -11,6 +11,9 @@
 > same day the embedding calls moved out of the membership lock (1.93.3, a follow-up of those PRs), so
 > the mcp 1.11.0 bump is now **1.93.4** and this plan's step 0 + 1 release is **1.93.5**.
 > 1.97.0 is unchanged.
+>
+> **Release renumbered (2026-11-27):** 1.95.0 went to the first-run setup (#206, #207), so Dream State
+> R1b and R1c became 1.96.0 and R2 1.97.0, and this plan's steps 2-4 are now **1.98.0**.
 >
 > Motivation: an outside pitch to move graph_mem onto a separate graph/vector database. A code-side
 > look showed that graph_mem already stores its vectors in MariaDB 11.8 with HNSW indexes. The
@@ -445,17 +448,18 @@ releases placed:
 | 1.93.4 | mcp 1.11.0 bump |
 | **1.93.5** | **This plan: step 0 (zero-vector bug fix) + step 1 (benchmark and specs)**, PRs A and B |
 | 1.94.0 | SQL exchange (five PRs incl. the JSON retirement, `docs/plans/done/sql-exchange-plan.md`, shipped) |
-| 1.95.0 | Dream State R1b and R1c (R1b-1 #204 and R1b-2, shipped) |
-| 1.96.0 | Dream State R2 |
-| **1.97.0** | **This plan: steps 2-4** (`vector_search_mode`, `suggest_merges_mode`, `suggest_merges` time budget setting, no vector on default loads), PRs C, E, D |
-| unnumbered | Dream State R3, R4 (after 1.97.0) |
+| 1.95.0 | First-run setup (#206, #207, `docs/plans/first-run-setup-plan.md`, shipped) |
+| 1.96.0 | Dream State R1b and R1c (R1b-1 #204 and R1b-2, shipped) |
+| 1.97.0 | Dream State R2 |
+| **1.98.0** | **This plan: steps 2-4** (`vector_search_mode`, `suggest_merges_mode`, `suggest_merges` time budget setting, no vector on default loads), PRs C, E, D |
+| unnumbered | Dream State R3, R4 (after 1.98.0) |
 
 - **1.93.5 right after the mcp 1.93.4 bump.** It's a bug fix with no migration and no new surface.
 - **Step 1 ships with step 0 in 1.93.5.** It's specs plus an opt-in rake task, with no runtime change.
   The plan already orders B right after A, and shipping it early also gives the write-cost numbers
   that Decision 1 waits for well before 1.97.0. If PR B isn't ready when A is, A ships alone as
   1.93.5 and B becomes the first PR of the 1.97.0 train (no version of its own).
-- **Steps 2-4 as one minor, 1.97.0, after R2 and before R3.** R3's "embedding-near entities of
+- **Steps 2-4 as one minor, 1.98.0, after R2 and before R3.** R3's "embedding-near entities of
   different types" rule can then use step 3's helper.
 - Step 5 is deferred and has no version.
 
@@ -467,12 +471,12 @@ releases placed:
 | B | Step 1: bench rake task (search latency, recall, write cost), EXPLAIN-shape, recall and filter-hazard specs. **1.93.5** (release in this PR) | S/M, ~500-800 lines | A | none (specs and opt-in tooling) |
 | C | Step 2: inner-ANN search channels, exact fallback, `vector_search_mode` setting (default `exact`, **search only**) with its info tooltip, plus the Settings info-tooltip component (`_field`, CSS, Stimulus controller), recall tuning to the bar, operator docs. **1.97.0** | M, ~800-1,200 lines | B | decided (Decisions 3, 4, N2, N3) |
 | D | Step 3: `VectorQuery` helper (`exact:` from each caller's own setting), `suggest_merges` batching, `suggest_merges_time_budget_seconds` (default 30) and text line, separate `suggest_merges_mode` (default `exact`) with ANN in `ann` mode and its recall gate, both fields with info tooltips, subquery → literal in the scoped checks. **1.97.0** (release in this PR) | M, ~900-1,400 lines | B, C (inner-ANN shape, tooltip component) | decided (Decisions 6, N1, N2, N3) |
-| E | Step 4: stop loading vectors by default; explicit readers. **1.97.0** | S/M, ~300-600 lines | A | none (performance only) |
+| E | Step 4: stop loading vectors by default; explicit readers. **1.98.0** | S/M, ~300-600 lines | A | none (performance only) |
 | F | Step 5: **deferred** (Decision 7), not scheduled | — | — | would need approval if picked up |
 | Release | Version, CHANGELOG, `sync_skill_version` (in the last PR of each release) | S | — | — |
 
 Each PR stays under the ~3,000-line stop. Order: **A → B** (1.93.5, after mcp 1.93.4), then after R2
-**C → E → D** (1.97.0; E can come before C, and D goes last because it reuses C's inner-ANN query
+**C → E → D** (1.98.0; E can come before C, and D goes last because it reuses C's inner-ANN query
 shape and the Settings tooltip component). F is deferred. **No new gems. No migrations** in A-E. Removing the index machinery
 (Decision 1, if the benchmark says so) would be a separate PR with a migration and needs Steve's
 approval.
@@ -508,14 +512,14 @@ Steve's answers to the plan's open questions:
 4. **Recall bar accepted as a starting bar**: ≥ 0.8 average recall@10, no probe below 0.5. Step 2's
    tuning must actually clear it.
 5. **Releases:** step 0 as **1.93.5**, right after the mcp 1.93.4 bump, with step 1 alongside it (renumbered twice on 2026-11-24, see the note at the top).
-   Steps 2-4 as **1.97.0**, after R2 and before R3.
+   Steps 2-4 as **1.98.0**, after R2 and before R3.
 6. **`suggest_merges` may stop on a time budget** and say so with a line in its existing text
    output. No new field.
 7. **Step 5 (FULLTEXT) is skipped for now** and stays in the plan as deferred.
 
 ## Decisions (Nov 24, 2026)
 
-Steve's answers to the two questions raised for the 1.97.0 kickoff (both now resolved):
+Steve's answers to the two questions raised for the 1.98.0 kickoff (both now resolved):
 
 - **N1. The `suggest_merges` time budget is an app setting**, `suggest_merges_time_budget_seconds`,
   **default 30 s**, a positive integer (proposed cap 600). rails-settings-cached, no migration. It

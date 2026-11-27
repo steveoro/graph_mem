@@ -2,9 +2,12 @@
 
 > Status: draft, 2026-11-20, written on `main` at 1.92.0. Revised the same day after Steve's
 > answers and two review rounds (see "Answers" at the end). **R1a shipped as 1.93.0** (see its
-> "As built" note). **R1b and R1c shipped together as 1.95.0** (R1b-1, #204, and R1b-2; see the
-> "Kickoff" and "As built (1.95.0)" notes under R1b and the "As built" note under R1c). R2 onward is not
+> "As built" note). **R1b and R1c shipped together as 1.96.0** (R1b-1, #204, and R1b-2; see the
+> "Kickoff" and "As built (1.96.0)" notes under R1b and the "As built" note under R1c). R2 onward is not
 > started. Each PR below gets its own kickoff.
+>
+> **Versions (2026-11-27):** 1.95.0 went to the first-run setup (#206, #207, its own plan), released
+> while R1b was in review, so R1b and R1c moved to **1.96.0** and R2 to **1.97.0**.
 >
 > **Versions (2026-11-24):** the `part_of` membership PRs took 1.93.1 and 1.93.2 (their own plan), so
 > the mcp 1.11.0 bump moved to 1.93.3. Later the same day the embedding calls moved out of the
@@ -119,9 +122,9 @@ The versions, as expected today (each kickoff confirms its own against `version.
 | Embeddings outside the membership lock | A follow-up of the membership PRs (`done/part-of-membership-plan.md`, Follow-ups) | after PR 2 (shipped) | 1.93.3 |
 | mcp 1.11.0 | (its own plan) | after the follow-up | 1.93.4 |
 | SQL exchange | (its own plan, five PRs incl. the JSON export's retirement: `done/sql-exchange-plan.md`) | after mcp 1.11.0 (shipped) | 1.94.0 |
-| **R1b** | Retype library `part_of` edges, the orphan rule, the scans, the SQL export's scope, dream-state actor on its edges (two PRs, R1b-1 and R1b-2; see its "Kickoff" note) | after the SQL exchange train (shipped) | 1.95.0 |
-| **R1c** | Removal-style evidence rows | with R1b, in R1b-2 (shipped) | 1.95.0 |
-| **R2** | Relation lifecycle | after R1 | 1.96.0 |
+| **R1b** | Retype library `part_of` edges, the orphan rule, the scans, the SQL export's scope, dream-state actor on its edges (two PRs, R1b-1 and R1b-2; see its "Kickoff" note) | after the SQL exchange train (shipped) | 1.96.0 |
+| **R1c** | Removal-style evidence rows | with R1b, in R1b-2 (shipped) | 1.96.0 |
+| **R2** | Relation lifecycle | after R1 | 1.97.0 |
 
 Each PR has its own kickoff, the usual ~3,000-line stop and push-and-continue checkpoints. R1a is
 about the size of 1.92.0; R1b is smaller in code but touches membership-adjacent paths.
@@ -345,9 +348,9 @@ below were made in the session, on the plan's "R1b's kickoff decides".
     - its docs.
   - **R1b-2**, stacked on it, carries:
     - the SQL export's scope and the export picker's roots;
-    - R1c (or 1.95.1 if the diff runs past the stop line);
+    - R1c (or 1.96.1 if the diff runs past the stop line);
     - its docs;
-    - the 1.95.0 release.
+    - the 1.96.0 release.
 - **Payload keys.** The keys stay R1a's: `operation`, `relation_id`, `from_entity_id`, `from_name`,
   `to_entity_id`, `to_name`, `old_type`, `new_type`, `reason`, plus `evidence`.
   - **`swap`:** `relation_id` and the endpoints are the stored `part_of` edge (library → Project),
@@ -380,7 +383,7 @@ below were made in the session, on the plan's "R1b's kickoff decides".
   SoftwareLibrary, TestFramework`, which covers 22 of the 23. The one left is a loose name match, which
   the operator can add in Settings.
 
-**As built (1.95.0).** R1b shipped as two PRs released together: R1b-1 (#204) and R1b-2, which also
+**As built (1.96.0).** R1b shipped as two PRs released together: R1b-1 (#204) and R1b-2, which also
 carries R1c (see its note) and the release. What Steve said comes first, then the calls made in the
 sessions.
 
@@ -448,7 +451,7 @@ with the fact as evidence. In R1 the row is **informational**: it can be dismiss
 lifecycle; remove the relation by hand if it is wrong"). R2 gives it its apply. Only 2 library-like
 entities are named in such a fact today, so this is small.
 
-**As built (1.95.0, with R1b-2).** The calls below were made in the session, on the kickoff's spec
+**As built (1.96.0, with R1b-2).** The calls below were made in the session, on the kickoff's spec
 (the edges' type filter is the lead's); none is Steve's.
 
 - **Where.** A second pass of phase `dependency_edges` (`DreamStateCompactor::RemovalEvidencePass`),
