@@ -18,7 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   4. `docker compose down && bin/up --build`
 
   A container built without the file says `RAILS_MASTER_KEY is set but config/credentials.yml.enc is missing`. If the pull stops on "Your local changes ... would be overwritten", move the file aside first, then run `git checkout -- config/credentials.yml.enc`, pull, and copy it back.
-- A new setup needs neither a master key nor a manual `config/database.yml`; `SECRET_KEY_BASE` in `.env` is optional. Removing the `storage` volume (`docker compose down -v`) removes a generated key and signs everyone out, nothing else (no column is encrypted).
+- A new setup needs neither a master key nor a manual `config/database.yml`; `SECRET_KEY_BASE` in `.env` is optional. To replace a generated key, delete it (`docker compose exec app rm storage/secret_key_base`, then `docker compose restart app`). That signs everyone out, nothing else (no column is encrypted). Don't use `docker compose down -v` for that: it also deletes the `graph_mem_db` volume, the whole database.
 - Fixed: a fresh clone's container no longer restarts in a loop on the missing `cable` database (#206).
 
 ### Added

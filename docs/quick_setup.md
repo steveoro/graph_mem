@@ -170,7 +170,7 @@ context to that project (it creates the Project entity if needed).
 | Symptom | Fix |
 |---|---|
 | App container keeps restarting; `docker compose logs app` says ``The `cable` database is not configured`` (an image built from an older checkout) or `config/database.yml is missing` | `cp config/database.example.yml config/database.yml`, then `docker compose down && bin/up --build`. |
-| App container keeps restarting; `docker compose logs app` says `RAILS_MASTER_KEY doesn't match config/credentials.yml.enc` | The key in `.env` didn't encrypt that file. Fix the key, or remove `RAILS_MASTER_KEY` from `.env` and delete `config/credentials.yml.enc` to boot without credentials. Then `docker compose down && bin/up --build`. |
+| App container keeps restarting; `docker compose logs app` says `RAILS_MASTER_KEY doesn't match config/credentials.yml.enc` | The key in `.env` didn't encrypt that file. Fix the key, or remove `RAILS_MASTER_KEY` from `.env` to boot without credentials (the file can stay, or move it out of `config/`). Then `docker compose down && bin/up --build`. |
 | App container keeps restarting; `docker compose logs app` says `RAILS_MASTER_KEY is set but config/credentials.yml.enc is missing` | The file is no longer tracked, so a `git pull` removed it: copy your backup back into `config/`, or remove `RAILS_MASTER_KEY` from `.env`. Then `docker compose down && bin/up --build`. |
 | Operator login returns 503 | Set `OPERATOR_PASSWORD` in `.env`, then `docker compose down && bin/up`. |
 | `embeddings:check` fails | Ollama isn't running, or `nomic-embed-text` isn't pulled. |
