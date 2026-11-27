@@ -316,6 +316,28 @@ The import itself is complete: the facts are in, only the review rows for reword
    - Ensure databases exist: `bin/rails db:create`
    - Run migrations: `bin/rails db:migrate`
 
+### Problem: Docker app restarts in a loop with "The `cable` database is not configured"
+
+**Symptoms:** `docker compose logs app` shows
+``The `cable` database is not configured for the `production` environment. (ActiveRecord::AdapterNotSpecified)``,
+listing only `production` as available, and the entrypoint prints
+`No config for queue/cache/cable in current environment — skipping.`
+
+**Cause:** `config/database.yml` is git-ignored, so a fresh clone doesn't have it. The image is built
+without it and Rails builds a single database from `DATABASE_URL`, with no cache, queue or cable
+database.
+
+An image built from a current checkout no longer hits this: the Dockerfile copies
+`config/database.example.yml` when the file is missing (#206). If an image still lacks the file
+(built another way), the entrypoint stops with `config/database.yml is missing: ...` instead.
+
+**Fix:**
+
+```bash
+cp config/database.example.yml config/database.yml
+docker compose down && bin/up --build
+```
+
 ### Problem: Docker app fails with "Access denied for user 'root'@'172.30.42.1'"
 
 The address is the compose bridge gateway (`GRAPH_MEM_DOCKER_SUBNET`, default `172.30.42.0/24`), not

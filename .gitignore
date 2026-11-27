@@ -33,6 +33,8 @@
 
 # Ignore master key for decrypting credentials and more.
 /config/master.key
+# Each setup that wants Rails credentials makes its own file; none is needed (#206).
+/config/credentials.yml.enc
 /config/database.yml
 .env
 /db/backup/*.sql.bz2

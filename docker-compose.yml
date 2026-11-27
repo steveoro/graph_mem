@@ -24,7 +24,10 @@ services:
         condition: service_healthy
     environment:
       RAILS_ENV: production
-      RAILS_MASTER_KEY: ${RAILS_MASTER_KEY}
+      RAILS_MASTER_KEY: ${RAILS_MASTER_KEY:-}
+      # Optional. With neither it nor a master key, bin/docker-entrypoint generates one in the
+      # storage volume on first boot (#206).
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE:-}
       DATABASE_URL: mysql2://root:${DB_PASSWORD:-my_password}@127.0.0.1:${DB_PORT:-3307}/${DB_NAME:-graph_mem}
       OLLAMA_URL: ${OLLAMA_URL:-http://localhost:11434}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}

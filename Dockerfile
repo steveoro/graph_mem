@@ -5,7 +5,9 @@
 #   docker compose up --build
 # Or standalone:
 #   docker build -t graph_mem .
-#   docker run -d -p 3030:3030 -e RAILS_MASTER_KEY=<key> --name graph_mem graph_mem
+#   docker run -d -p 3030:3030 -v graph_mem_storage:/rails/storage --name graph_mem graph_mem
+# No key needed: without SECRET_KEY_BASE or RAILS_MASTER_KEY, bin/docker-entrypoint generates a
+# secret_key_base into the storage volume on first boot (#206).
 
 ARG RUBY_VERSION=3.4.13
 FROM docker.io/library/ruby:$RUBY_VERSION-slim AS base
@@ -40,6 +42,10 @@ RUN bundle install && \
     bundle exec bootsnap precompile --gemfile
 
 COPY . .
+
+# A fresh clone has no config/database.yml (git-ignored): use the example (#206). A local one in the
+# build context is kept as it is.
+RUN [ -f config/database.yml ] || cp config/database.example.yml config/database.yml
 
 RUN bundle exec bootsnap precompile app/ lib/
 
