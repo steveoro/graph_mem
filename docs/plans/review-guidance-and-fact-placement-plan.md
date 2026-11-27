@@ -180,7 +180,7 @@ facts have such a target.
 ## As built (1.96.1)
 
 - **Item 1, captions.** `ReviewHelper#review_action` (a row's action) and `#review_captioned` (any
-  caption, the group cards' too) put the caption under the button with `aria-describedby`;
+  caption, the group confirm card's too) put the caption under the button with `aria-describedby`;
   `#review_action_caption` reads `ui.review.actions.<kind>.<action>`, else `ui.review.actions.default.<action>`.
   - Default actions: `preview` (Apply… and Repair…), `confirm` (the confirm card's write), `apply_now` (a
     safe kind's list-row Apply), `dismiss`, `snooze`, `restore`, `cancel`, `save` and `choose` (the list
@@ -194,14 +194,17 @@ facts have such a target.
     after that reopens it; Restore lifts the suppression but leaves an applied change applied (Undo
     reverts that); a delete_entity confirm can't be undone.
   - Besides the plan's buttons: Save (an editable kind) and the group card's Review link have captions,
-    so every `.ui-btn` of the cards has one. The group cards show them visibly, in the digest and in the
-    grouped lists alike (one partial); the list rows and the resolved list's Restore carry a `title`.
+    so every `.ui-btn` of the cards has one. The group cards carry theirs as a `title`, like the list rows
+    and the resolved list's Restore: with visible captions, each group in the digest and the grouped lists
+    grew four stacked lines (seen in a render at 1280 px, the lead's call). The group confirm card shows
+    its caption in full.
   - `spec/requests/review_action_captions_spec.rb` seeds a pending row of every kind the classifier names
     (relation_retype as retype, choice, swap and add), follows each detail card's preview links, and
     checks every `.ui-btn` of the detail, confirm, group and group confirm cards.
 - **Item 2, guard hint.** `ReviewHelper#review_guard_hint`, for a `context` guard only: under the Guard
-  line, in front of the suggested replacement, and above the confirm card's pre-filled text (supersede
-  only). It leads "The guard disagrees with the judge:" on a `superseded` verdict and "… with this
+  line and above the confirm card's pre-filled text (supersede only). In front of the card's suggested
+  replacement, a short note says it was written across the guard above. The full hint there would repeat
+  the paragraph just above it on the same card (seen in a render; the lead's call). It leads "The guard disagrees with the judge:" on a `superseded` verdict and "… with this
   proposal:" on an unjudged row, and says "newer observation" instead of "source fact" on a
   contradiction-fallback row.
 - **Item 3, words-unrelated pairs.** `Comparison#words_unrelated?` (`subject == :unrelated && by_words`)

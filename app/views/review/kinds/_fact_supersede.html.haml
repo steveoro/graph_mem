@@ -32,7 +32,7 @@
     = render "review/kinds/keyword_path", observation: observation, shared: shared
 - if payload["replacement"].present?
   - if guard_hint
-    %p.review-hint{ data: { testid: "fact-supersede-replacement-hint" } }= guard_hint
+    %p.review-hint{ data: { testid: "fact-supersede-replacement-hint" } }= t("ui.review.fact_supersede.guard_replacement_note")
   %p.review-hint{ data: { testid: "fact-supersede-replacement" } }= "Suggested replacement: #{payload['replacement'].to_s.truncate(300)}"
 - if observation&.active? && row.pending?
   .review-detail__actions

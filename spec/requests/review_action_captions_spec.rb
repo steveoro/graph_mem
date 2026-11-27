@@ -3,9 +3,10 @@
 require "rails_helper"
 
 # 1.96.1 (review guidance, item 1): every Review & Fix action says what it does. The detail card, the
-# kind cards' own buttons, the confirm cards (their writes have their own caption) and the group
-# cards show a caption under each button, tied to it by aria-describedby; the list rows carry the
-# same text as a title only. Every .ui-btn of those cards is checked, so a new button needs one.
+# kind cards' own buttons and the confirm cards, the group confirm cards included (their writes have
+# their own caption), show a caption under each button, tied to it by aria-describedby. The list rows
+# and the group cards carry the same text as a title only, so the lists stay compact. Every .ui-btn
+# of those cards is checked, so a new button needs one.
 RSpec.describe "Review & Fix › action captions", type: :request do
   let!(:project) { fs_project!("SynthApp") }
   let!(:widget) { fs_member!(project, "SynthWidget") }
@@ -123,6 +124,20 @@ RSpec.describe "Review & Fix › action captions", type: :request do
     end
   end
 
+  # The grouped lists stay compact: each group card action carries its caption as a title.
+  def titles(testid, name)
+    cards = Nokogiri::HTML5(response.body).css("[data-testid='#{testid}']")
+    expect(cards).to be_present, "#{name}: no #{testid}"
+    cards.flat_map do |card|
+      card.css("a.ui-btn, button.ui-btn, input.ui-btn").map do |button|
+        label = (button.text.presence || button["value"]).to_s.squish
+        expect(button["title"]).to be_present, "#{name}: '#{label}' has no title"
+        expect(button["title"]).not_to include("translation_missing"), "#{name}: '#{label}' has a missing title"
+        [ label, button["title"] ]
+      end
+    end
+  end
+
   it "has a row for every kind the classifier names" do
     expect(seed_every_kind.values.map(&:kind).uniq).to match_array(all_kinds)
   end
@@ -217,14 +232,14 @@ RSpec.describe "Review & Fix › action captions", type: :request do
     )
   end
 
-  it "captions the group cards' actions and the group confirm cards" do
+  it "gives the group cards' actions their captions as titles, and captions the group confirm cards" do
     rows = seed_every_kind
     %w[attention kind errors scan].each do |view|
       get review_path(view: view)
-      captions("review-group", view) if response.body.include?("data-testid=\"review-group\"")
+      titles("review-group", view) if response.body.include?("data-testid=\"review-group\"")
     end
     get review_path(view: "kind")
-    expect(captions("review-group", "kind").to_h).to include(
+    expect(titles("review-group", "kind").to_h).to include(
       "Apply high-confidence" => "Opens a confirm card for this group's relationship proposals and stale-memory rows at confidence 0.8 " \
                                  "or more (at most 100); nothing is written yet.",
       "Review" => "Lists this group's suggestions here; nothing is written.",

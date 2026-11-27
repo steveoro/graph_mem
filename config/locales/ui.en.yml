@@ -77,6 +77,8 @@ en:
         guard_hint: "%{lead} this observation names a version or an environment that the %{fact} doesn't, or it is a work-log entry (true when written). Old isn't wrong, so Dismiss unless the %{fact} really replaces it."
         guard_lead_judged: "The guard disagrees with the judge:"
         guard_lead: "The guard disagrees with this proposal:"
+        # 1.96.1: the short note in front of the judge's replacement on the card (the full hint is just above).
+        guard_replacement_note: "Written across the guard above: check it before you use it."
         source_fact: "source fact"
         newer_observation: "newer observation"
       contradiction:

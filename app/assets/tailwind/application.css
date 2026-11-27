@@ -503,8 +503,14 @@
     display: grid;
     gap: 0.25rem;
     justify-items: start;
+    align-content: start;
     flex: 1 1 12rem;
     max-width: 20rem;
+  }
+
+  /* In a form's column flexbox the 12rem basis would be a height: the action keeps its own size. */
+  .ui-form > .review-action {
+    flex: none;
   }
 
   .review-action__caption {

@@ -40,7 +40,7 @@ RSpec.describe "Review & Fix › Outdated by a fact › guard hint", type: :requ
     hint = "The guard disagrees with the judge: #{hint_tail}"
     expect(html.at_css("[data-testid='fact-supersede-guard-hint']").text).to eq(hint)
     replacement_hint = html.at_css("[data-testid='fact-supersede-replacement-hint']")
-    expect(replacement_hint.text).to eq(hint)
+    expect(replacement_hint.text).to eq("Written across the guard above: check it before you use it.") # the full hint is just above
     expect(replacement_hint.next_element["data-testid"]).to eq("fact-supersede-replacement")
 
     get review_row_preview_path(row.row_uuid, fact_action: "supersede")
