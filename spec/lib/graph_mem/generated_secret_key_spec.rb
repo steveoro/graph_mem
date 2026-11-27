@@ -79,10 +79,18 @@ RSpec.describe GraphMem::GeneratedSecretKey do
   end
 
   describe ".read" do
-    it "returns the key without its trailing newline" do
-      write_generated_key
+    it "returns the key without its trailing newlines, as the entrypoint's $(cat ...) reads it" do
+      write_generated_key("#{generated}\n\n")
 
       expect(described_class.read(env: {}, root: @root) == generated).to be(true)
+    end
+
+    it "ignores a file that isn't one line of 128 hex characters, which the entrypoint replaces" do
+      [ "  \n", " #{generated}\n", "#{generated}\nextra\n", "#{SecureRandom.hex(32)}\n", "#{generated.upcase}\n" ].each do |content|
+        write_generated_key(content)
+
+        expect(described_class.read(env: {}, root: @root)).to be_nil
+      end
     end
   end
 end

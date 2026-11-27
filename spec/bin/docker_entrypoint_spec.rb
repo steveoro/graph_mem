@@ -92,6 +92,23 @@ RSpec.describe "bin/docker-entrypoint" do
       expect(generated_key == first).to be(true)
       expect(rails_calls.last).to eq("rails server key_length=128 key_set=yes")
     end
+
+    it "replaces a key file that isn't one line of 128 hex characters, and a stale 0644 temp file, keeping 0600" do
+      [ "  \n", "\n\n", "#{SecureRandom.hex(32)}\n", "#{SecureRandom.hex(64)}\nextra\n" ].each do |content|
+        File.write(path("storage/secret_key_base"), content)
+        File.write(path("storage/secret_key_base.tmp"), "stale")
+        File.chmod(0o644, path("storage/secret_key_base.tmp"))
+
+        stdout, stderr, status = run_entrypoint
+
+        expect(status).to be_success, stderr
+        expect(stdout.lines(chomp: true)).to eq([ generated_message ])
+        expect(generated_key.match?(/\A\h{128}\z/)).to be(true)
+        expect(File.stat(path("storage/secret_key_base")).mode & 0o777).to eq(0o600)
+        expect(Dir.children(path("storage"))).to eq([ "secret_key_base" ])
+        expect(rails_calls.last).to eq("rails server key_length=128 key_set=yes")
+      end
+    end
   end
 
   describe "with a key configured" do

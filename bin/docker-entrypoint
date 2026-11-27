@@ -20,14 +20,22 @@ prepare_secret_key_base() {
     return 0
   fi
 
-  if [ ! -s "$GENERATED_KEY_FILE" ]; then
-    # umask 077 creates the file 0600. Written to a temp file and renamed, so a failed write never
-    # leaves a partial key behind.
+  local key=""
+  [ ! -f "$GENERATED_KEY_FILE" ] || key=$(cat "$GENERATED_KEY_FILE")
+  # A key written here is one line of 128 hex characters. Anything else (empty, blank, truncated)
+  # is replaced, since GeneratedSecretKey ignores such a file too: exporting it would hand Rails an
+  # empty or different key.
+  if [[ ! $key =~ ^[0-9a-f]{128}$ ]]; then
+    # umask 077 creates the file 0600; a stale temp file (or a symlink there) would keep its own
+    # mode, so it goes first. Written to a temp file and renamed, so a failed write never leaves a
+    # partial key behind.
+    rm -f "$GENERATED_KEY_FILE.tmp"
     (umask 077 && ruby -rsecurerandom -e 'puts SecureRandom.hex(64)' >"$GENERATED_KEY_FILE.tmp")
     mv "$GENERATED_KEY_FILE.tmp" "$GENERATED_KEY_FILE"
+    key=$(cat "$GENERATED_KEY_FILE")
     echo "secret_key_base: generated and kept in the storage volume (set SECRET_KEY_BASE in .env to choose your own)"
   fi
-  SECRET_KEY_BASE=$(cat "$GENERATED_KEY_FILE")
+  SECRET_KEY_BASE=$key
   export SECRET_KEY_BASE
 }
 

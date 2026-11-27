@@ -17,6 +17,9 @@ module GraphMem
     # Relative to the app root. Keep it in step with GENERATED_KEY_FILE in bin/docker-entrypoint.
     PATH = "storage/secret_key_base"
 
+    # What bin/docker-entrypoint writes (SecureRandom.hex(64)) and accepts; it replaces anything else.
+    FORMAT = /\A[0-9a-f]{128}\z/
+
     module_function
 
     # Removes an empty SECRET_KEY_BASE from +env+: compose passes "" when .env has none, and Rails
@@ -45,16 +48,19 @@ module GraphMem
         !root.join("config/master.key").exist?
     end
 
+    # Reads the file the way the entrypoint does (trailing newlines dropped, as `$(cat ...)` drops
+    # them) and accepts only a key of {FORMAT}, so both sides agree on what the key is.
+    #
     # @param env [ENV, Hash{String => String}]
     # @param root [Pathname] the application root
     # @return [String, nil] the generated key; nil when another key source is set ({.needed?} is
-    #   false) or no key was generated yet
+    #   false), no key was generated yet, or the file doesn't hold one
     def read(env: ENV, root: Rails.root)
       return unless needed?(env: env, root: root)
 
       path = root.join(PATH)
-      key = path.read.strip if path.file?
-      key unless key.nil? || key.empty?
+      key = path.read.sub(/\n+\z/, "") if path.file?
+      key if key&.match?(FORMAT)
     end
   end
 end
