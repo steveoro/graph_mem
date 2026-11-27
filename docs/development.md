@@ -61,10 +61,14 @@ bundle install
 Copy the sample database configuration:
 
 ```bash
-cp config/database.yml.sample config/database.yml
+cp config/database.example.yml config/database.yml
 ```
 
-Edit `config/database.yml` to match your local MariaDB configuration.
+Edit `config/database.yml` to match your local MariaDB configuration. (`bin/setup` makes the same
+copy when the file is missing.)
+
+No master key is needed: in development and test Rails generates its own `secret_key_base` in
+`tmp/local_secret.txt`.
 
 ### Step 4: Set Up the Database
 

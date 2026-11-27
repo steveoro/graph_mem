@@ -31,6 +31,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The export leaves an inert `source-fact` tag out:** an active fact whose entity is global and not a Project (a library after its swap, a global root's member) is written without that tag, which does nothing outside a project, which the model refuses on save, and for which the import refused the whole script. The source keeps it.
 - Docs: [docs/dream_state.md](docs/dream_state.md) (the `dependency_edges` phase and its removal pass, the orphan rule, the `add` rows, the swap's apply, refusals and merges, the `relation_review` rows, the actor, the stats), [docs/mcp_tools.md](docs/mcp_tools.md) (the `relation_retype` operations and payload, the `relation_review` kind and its apply error), [docs/data_exchange.md](docs/data_exchange.md) (the export's scope and roots, the tag rule, the known limit of a target that hasn't swapped), [docs/architecture.md](docs/architecture.md) (libraries and the global scope, the export's hop, the policy, R1c, the change set kind), [docs/summarization.md](docs/summarization.md#project-scans) (scan resolution), [docs/app_settings_reference.md](docs/app_settings_reference.md) and the UI guide (the Review cards, the settings, the compactor card, the export roots). The Dream State plan has "As built" notes for R1b and R1c; the vector search plan's release table names 1.95.0.
 
+## [1.95.0] - 2026-11-27
+
+**First-run setup without a master key or a hand-made `config/database.yml`** (#206). A fresh clone builds and boots the container as it comes. The image falls back to `config/database.example.yml`. Without `SECRET_KEY_BASE` and without a master key, graph_mem generates a `secret_key_base` on first boot and keeps it in the `storage` volume. A configuration error that a boot can't fix (a wrong master key, a master key without its credentials file, a missing `config/database.yml`) now stops the container with one line naming the fix, not a stack trace. No change to any MCP tool, parameter or schema (tool counts stay 12 / 9 / 22), and no migration.
+
+**Upgrade.**
+- Nothing to run for an existing setup. A local `config/database.yml`, `config/master.key` and `RAILS_MASTER_KEY` keep working as before, with the same `secret_key_base` (from the credentials), so sessions stay valid and no key is generated.
+- **`config/credentials.yml.enc` is no longer tracked**, and a pull that removes a tracked file deletes the working copy. On every checkout that uses the file, before pulling:
+  1. `mkdir -p ~/graph_mem-keys && cp config/credentials.yml.enc config/master.key ~/graph_mem-keys/`
+  2. `git pull`
+  3. `cp ~/graph_mem-keys/credentials.yml.enc config/` (it is ignored now; `git status --short config/` prints nothing)
+  4. `docker compose down && bin/up --build`
+
+  A container built without the file says `RAILS_MASTER_KEY is set but config/credentials.yml.enc is missing`. If the pull stops on "Your local changes ... would be overwritten", move the file aside first, then run `git checkout -- config/credentials.yml.enc`, pull, and copy it back.
+- A new setup needs neither a master key nor a manual `config/database.yml`; `SECRET_KEY_BASE` in `.env` is optional. To replace a generated key, delete it (`docker compose exec app rm storage/secret_key_base`, then `docker compose restart app`). That signs everyone out, nothing else (no column is encrypted). Don't use `docker compose down -v` for that: it also deletes the `graph_mem_db` volume, the whole database.
+- Fixed: a fresh clone's container no longer restarts in a loop on the missing `cable` database (#206).
+
+### Added
+- **A generated `secret_key_base`.** `bin/docker-entrypoint` (server command only) creates `storage/secret_key_base` when `SECRET_KEY_BASE` and `RAILS_MASTER_KEY` are both empty and there is no `config/master.key`. The file holds 128 hex characters and has mode 0600: it is written with `umask 077` to a fresh temp file (a stale one is removed first), then renamed. It is created once; a file that isn't one line of 128 hex characters (empty, blank, truncated) is replaced. The entrypoint exports the key to the server and prints `secret_key_base: generated and kept in the storage volume (set SECRET_KEY_BASE in .env to choose your own)` only when it writes one. It never prints the key.
+- `GraphMem::GeneratedSecretKey`, called first in `config/environments/production.rb`, applies the same rule in every process, so `docker compose exec app bin/rails ...` (which skips the entrypoint) uses the same key. It reads the file as the entrypoint does and ignores one that doesn't hold such a key. With `SECRET_KEY_BASE` or a master key set it never reads the file.
+- **A boot preflight** in `bin/docker-entrypoint`, before `db:prepare`. It prints one line on stderr and exits 1 when:
+  - `RAILS_MASTER_KEY` doesn't decrypt `config/credentials.yml.enc`, a key of the wrong length included. A short `bundle exec ruby` check decrypts the file without booting the app.
+  - `RAILS_MASTER_KEY` is set but the credentials file is missing and `SECRET_KEY_BASE` is empty.
+  - `config/database.yml` is missing.
+
+  `restart: unless-stopped` stays, so every restart logs the fix.
+
+### Changed
+- The Dockerfile's build stage copies `config/database.example.yml` to `config/database.yml` when the build context has none; a local file is kept as it is. `bin/setup` makes the same copy for native development (its commented-out block named a `database.yml.sample` that doesn't exist).
+- `docker-compose.yml` passes `SECRET_KEY_BASE: ${SECRET_KEY_BASE:-}`, and `RAILS_MASTER_KEY` becomes `${RAILS_MASTER_KEY:-}`. The value is unchanged; compose just no longer warns when `.env` has no key. An empty `SECRET_KEY_BASE` counts as unset, in the entrypoint and in Rails: Rails 8.1 would take `""` as an invalid key instead of reading the credentials.
+- `config/credentials.yml.enc` is no longer tracked and is now in `.gitignore`, next to `config/master.key`. The tracked copy was a shared file that no new setup needs; each setup that wants Rails credentials makes its own.
+- Docs. In `docs/quick_setup.md`, step 1 copies only `.env` (`SECRET_KEY_BASE` optional), and step 2 is now an optional route to your own Rails credentials. Its troubleshooting table covers the new messages, and the cable-error row stays for images built from an older checkout. `.env.example` has `SECRET_KEY_BASE=`, and `RAILS_MASTER_KEY` is marked optional. The README Quick Start and configuration table say the same. `docs/troubleshooting.md` notes that current images no longer hit the cable error, and `docs/development.md` notes that native development needs no key.
+
 ## [1.94.0] - 2026-11-26
 
 **graph_mem-sql**, the new export and import format, which replaces the retired JSON export and upload: one self-contained SQL script that syncs a project from a source machine to a target machine. It adds what the target is missing, updates what is older (newer `updated_at` wins, a tie stays local), deletes nothing, and either commits everything or nothing. It keeps what the JSON export loses (observation status, perspective, supersede links, entity descriptions), is checked by a validator and by guards before anything is written, and is followed by a job that does what the raw SQL skipped (embeddings, trust scores, keywords, review rows). Projects › Exports writes it (every export is one, and the sync endpoint returns it), Projects › Imports takes it (and only it), and `graph_mem:export_sql` / `graph_mem:import_sql` run it from a shell. The reference is the new [docs/data_exchange.md](docs/data_exchange.md). No change to any MCP tool, parameter or schema (tool counts stay 12 / 9 / 22), and no migration.
