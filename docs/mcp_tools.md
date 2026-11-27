@@ -124,7 +124,8 @@ same placement rules:
   "<Project> Conventions", and every other fact on the most specific existing entity it is about, not
   on the Project entity;
 - a **source fact** (tag `source-fact`, one per statement changed in a README or doc, with a
-  `docs:<path>` or `official:<url>` source) on the entity the changed statement is about: search for
+  `docs:<path>` source; the skill also allows `official:<url>` and a `replaces:<old term>` tag) on the
+  entity the changed statement is about: search for
   it, and create it `part_of` the Project if it doesn't exist. The Project entity only takes a
   statement about the whole project;
 - a shallow tree: Project → Component or Feature → Task or Issue, three levels at most. An Issue goes

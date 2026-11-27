@@ -90,7 +90,7 @@ module ReviewHelper
   def review_captioned(kind, id_parts, action, **values, &block)
     caption_id = [ "review-caption", *id_parts ].compact.join("-")
     caption = tag.p(review_action_caption(kind, action, **values), id: caption_id, class: "review-hint review-action__caption",
-                                                                   data: { testid: "review-caption", action: action })
+                                                                   data: { testid: "review-caption", review_action: action })
     tag.div(class: "review-action") { safe_join([ capture(caption_id, &block), caption ]) }
   end
 
