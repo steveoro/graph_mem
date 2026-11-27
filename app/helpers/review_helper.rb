@@ -80,6 +80,24 @@ module ReviewHelper
     tag.div(class: "review-action") { safe_join([ capture(caption_id, &block), caption ]) }
   end
 
+  # What a "context" guard on an "Outdated by a fact" row means (1.96.1): shown under the guard line,
+  # in front of the judge's replacement and above the confirm card's replacement text. Worded for the
+  # row's other side: a source fact, or a contradiction fallback's newer observation (1.85.0).
+  #
+  #   review_guard_hint("guard" => "context", "verdict" => "superseded")
+  #   # => "The guard disagrees with the judge: this observation names a version or an environment that the source fact doesn't, ..."
+  #
+  # @param payload [Hash] the row's effective payload (string keys)
+  # @return [String, nil] nil without a guard, or for "keep" (such a row is never proposed)
+  def review_guard_hint(payload)
+    return nil unless payload["guard"] == FactSupersede::LegacyGuard::CONTEXT
+
+    scope = "ui.review.fact_supersede"
+    lead = t("#{scope}.#{payload['verdict'] == 'superseded' ? 'guard_lead_judged' : 'guard_lead'}")
+    fact = t("#{scope}.#{payload['origin'] == FactSupersede::ContradictionFallback::ORIGIN ? 'newer_observation' : 'source_fact'}")
+    t("#{scope}.guard_hint", lead: lead, fact: fact)
+  end
+
   # @param kind [String] a review row kind
   # @return [String] the label of its Apply button ("Repair" for a lifecycle_corruption row)
   def review_apply_label(kind)

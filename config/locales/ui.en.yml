@@ -63,6 +63,13 @@ en:
           dismiss: "The relation still holds: nothing changes, and this fact isn't flagged against it again (Restore brings it back)."
         delete_entity:
           apply: "Deletes the entity as listed above; this can't be undone."
+      fact_supersede:
+        # 1.96.1: what a "context" guard (FactSupersede::LegacyGuard) means (ReviewHelper#review_guard_hint).
+        guard_hint: "%{lead} this observation names a version or an environment that the %{fact} doesn't, or it is a work-log entry (true when written). Old isn't wrong, so Dismiss unless the %{fact} really replaces it."
+        guard_lead_judged: "The guard disagrees with the judge:"
+        guard_lead: "The guard disagrees with this proposal:"
+        source_fact: "source fact"
+        newer_observation: "newer observation"
       contradiction:
         differs: "Differs from the other side: %{own} here, %{other} there"
       keyword_path:

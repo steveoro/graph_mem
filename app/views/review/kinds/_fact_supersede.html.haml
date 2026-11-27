@@ -4,12 +4,17 @@
 - fact = MemoryObservation.includes(:memory_entity).find_by(id: payload["fact_observation_id"].to_i)
 - observation = MemoryObservation.includes(:memory_entity).find_by(id: payload["observation_id"].to_i)
 - shared = fact && observation && FactKeywords::Relatedness.computed?(fact, observation) ? FactKeywords::Relatedness.compare(fact, observation).shared : []
+-# 1.96.1: a "context" guard gets a hint, under it and in front of the judge's replacement (one
+-# written across the guard is the likeliest to be nonsense). A "keep" row is never proposed.
+- guard_hint = review_guard_hint(payload)
 %p.review-hint{ data: { testid: "fact-supersede-verdict" } }
   = "Judge: #{payload['verdict']} · confidence #{payload['confidence']}"
   - if payload["reason"].present?
     = "· #{payload['reason']}"
 - if payload["guard"].present?
   %p.review-warning{ data: { testid: "fact-supersede-guard" } }= "Guard: #{payload['guard']} (#{payload['guard_reason']})"
+  - if guard_hint
+    %p.review-hint{ data: { testid: "fact-supersede-guard-hint" } }= guard_hint
 - if payload.dig("signals", "scoped") == false
   %p.review-warning{ data: { testid: "fact-supersede-unscoped" } } The entity has no project: the fact isn't authoritative for it, and this is never auto-applied.
 .review-contradiction
@@ -26,7 +31,9 @@
     %p.review-hint= observation ? [ observation.status, observation.source, observation.perspective ].compact_blank.join(" · ") : "gone"
     = render "review/kinds/keyword_path", observation: observation, shared: shared
 - if payload["replacement"].present?
-  %p.review-hint= "Suggested replacement: #{payload['replacement'].to_s.truncate(300)}"
+  - if guard_hint
+    %p.review-hint{ data: { testid: "fact-supersede-replacement-hint" } }= guard_hint
+  %p.review-hint{ data: { testid: "fact-supersede-replacement" } }= "Suggested replacement: #{payload['replacement'].to_s.truncate(300)}"
 - if observation&.active? && row.pending?
   .review-detail__actions
     = review_action(row, :supersede, id: payload["observation_id"]) do |caption_id|
