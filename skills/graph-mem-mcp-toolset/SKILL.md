@@ -50,13 +50,19 @@ reading the repository, not instead of it.
 - Same point already stored → `graph_edit` update_observation with `supersede: true`.
   New → `graph_write` create_observation with `source`, plus `valid_until` if time-bound.
 - Homes: "User Preferences" (Preference, global); "<Project> Conventions"
-  (BestPractice, part_of the Project); environment facts on the entity they describe.
+  (BestPractice, part_of the Project) for conventions. Put every other fact on the most
+  specific existing entity it is about, not on the Project entity.
+- Keep the tree shallow: Project → Component or Feature → Task or Issue, three levels at most.
+  An Issue goes `part_of` the component it is about; its fix is a PossibleSolution that
+  `solves` it. Search before you create any entity.
 - Follow `possible_duplicate` and `next_move`; never force a duplicate.
 - Right after you changed a README or doc that states how a project works, write one short
-  source fact per changed statement: `graph_write` create_observation on the project's entity
-  with `tags: ["source-fact"]` (plus `replaces:<old term>` when it replaces something) and a
-  `docs:<path>` or `official:<url>` source. graph_mem then proposes, in that project only, the
-  observations it outdates; an operator or a maintenance session applies them.
+  source fact per changed statement: `graph_write` create_observation with
+  `tags: ["source-fact"]` (plus `replaces:<old term>` when it replaces something) and a
+  `docs:<path>` or `official:<url>` source, on the entity the changed statement is about.
+  Search for it, and create it `part_of` the Project if it doesn't exist. Use the Project
+  entity only for a statement about the whole project. graph_mem then proposes, in that
+  project only, the observations it outdates; an operator or a maintenance session applies them.
 
 ## Context and safety
 - Context is per `X-MCP-Client`; it boosts, not filters, search. `set_context(entity_id: null)` clears it.
