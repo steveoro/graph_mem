@@ -327,6 +327,10 @@ listing only `production` as available, and the entrypoint prints
 without it and Rails builds a single database from `DATABASE_URL`, with no cache, queue or cable
 database.
 
+An image built from a current checkout no longer hits this: the Dockerfile copies
+`config/database.example.yml` when the file is missing (#206). If an image still lacks the file
+(built another way), the entrypoint stops with `config/database.yml is missing: ...` instead.
+
 **Fix:**
 
 ```bash

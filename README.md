@@ -170,8 +170,8 @@ Interactive Cytoscape.js-based graph visualization at the server root (`/`), wit
 ## Quick Start with Docker
 
 > New workstation? [docs/quick_setup.md](docs/quick_setup.md) covers the container, the MCP
-> client config and the skill and rule for Claude Code, Cursor and Devin Desktop in seven steps,
-> including generating your own master key.
+> client config and the skill and rule for Claude Code, Cursor and Devin Desktop in seven steps.
+> No master key is needed.
 
 **Prerequisites:** Ollama must be running on the host with at least one embedding model pulled:
 
@@ -193,10 +193,10 @@ ollama pull nomic-embed-text
 git clone https://github.com/steveoro/graph_mem.git
 cd graph_mem
 
-# Copy the example configs (both files are git-ignored) and set your master key
+# Copy the example .env (git-ignored) and set DB_PASSWORD and OPERATOR_PASSWORD in it.
+# No master key and no config/database.yml needed: the image uses config/database.example.yml,
+# and graph_mem generates a secret_key_base on first boot unless .env sets SECRET_KEY_BASE.
 cp .env.example .env
-cp config/database.example.yml config/database.yml
-# Edit .env: set RAILS_MASTER_KEY (your own key: docs/quick_setup.md, step 2) and DB_PASSWORD
 
 # Start the stack (MariaDB 11.8 + Rails in production mode), with the host's LAN
 # as the MCP allowlist defaults (on Linux "@lan", read by graph_mem from its
@@ -614,7 +614,8 @@ Sign in at `/operator/login`. Default operator credentials: `operator` / `change
 | `DB_PASSWORD` | `my_password` | MariaDB root password |
 | `DB_NAME` | `graph_mem` | Database name |
 | `DB_PORT` | `3307` | Host port for MariaDB (Docker) |
-| `RAILS_MASTER_KEY` | -- | Rails credentials key (required for Docker) |
+| `SECRET_KEY_BASE` | generated | Signs sessions and cookies. Unset (and no master key): generated on first boot into the `storage` volume |
+| `RAILS_MASTER_KEY` | -- | Optional: key of your own `config/credentials.yml.enc`, whose `secret_key_base` is then used unless `SECRET_KEY_BASE` is set |
 | `DATABASE_URL` | -- | Full database URL (overrides individual DB settings) |
 | `DB_BACKUP_HOST_PATH` | `./db/backup` | full path to DB backup(s) folder (default is invalid: docker-compose won't expand special characters) |
 | `OPERATOR_USERNAME` | `operator` | Operator login username for the web dashboard |
