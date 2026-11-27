@@ -2,8 +2,8 @@
 
 > Status: draft, 2026-11-27, written on `main` at 1.96.0. Steve asked for it on 2026-11-26 after an
 > "Outdated by a fact" row he couldn't place. He agreed to items 1-4 and asked for the plan once Dream
-> State R1b shipped. Item 3's scope and parts of item 4 wait for his answers (see "Questions"). The
-> plan has one PR and one kickoff.
+> State R1b shipped. He answered the plan's four questions on 2026-11-27 (see "Answers"). The plan has
+> one PR and one kickoff.
 
 ## Context
 
@@ -89,7 +89,7 @@ What they say:
 - **Also:** the same hint goes in front of the judge's suggested replacement when a guard fired, since a
   replacement written across a guard is the likeliest to be nonsense.
 
-## 3. Skip pairs that only the LLM words call unrelated (scope: Steve's answer)
+## 3. Skip pairs that only the LLM words call unrelated (any one entity)
 
 - **Today:**
   - `FactSupersede::Proposals` neither judges nor proposes a pair the keyword paths call unrelated
@@ -101,10 +101,8 @@ What they say:
     of that kind dismissed by NoSharedSubject, judged or not.
   - A search-term match still overrides, as it does for path-unrelated pairs.
   - The words-related case doesn't change.
-- **Scope**, Steve's call:
-  - **(a) root only**, as agreed on 2026-11-26: both facts held by one Project root.
-  - **(b) any one entity**: the data has 0 right out of 67, and the typical case is a Conventions entity
-    holding many unrelated rules.
+- **Scope (Steve, 2026-11-27): any one entity**, not only a Project root. The data has 0 right out of
+  67, and the typical case is a Conventions entity holding many unrelated rules.
 - **Contradictions are not part of it.** The 6 words-unrelated contradiction rows predate today's
   detector gates, and the words-related ones are useful (10 approved).
 - **Where:** `FactKeywords::Relatedness::Comparison#hard_unrelated?`, or a sibling predicate that
@@ -136,7 +134,8 @@ What they say:
 **Surface:**
 - No tool, parameter or schema change, and the MCP snapshots are untouched: prompt text isn't
   snapshotted.
-- The `persist` prompt's text is MCP-visible, though, so it needs Steve's OK (see "Questions").
+- The `persist` prompt's text is MCP-visible, though. Steve approved changing it together with
+  SKILL.md on 2026-11-27.
 
 **Checks and measuring:**
 - SKILL.md stays within `agent_text_sync_spec`'s limits and passes `skills-ref validate`.
@@ -144,8 +143,10 @@ What they say:
   - the share of new source facts held by a Project root (78% today);
   - the share of new facts held by a root (12% today);
   - the new "Outdated by a fact" rows by relatedness class.
-- An adoption-eval run is optional and needs Steve's MCP token and config, so it would be his to start.
-  See "Questions".
+- **An adoption-eval run** follows the wording change (Steve, 2026-11-27). It needs his MCP token and
+  config, so he starts it. The PR describes the session to run: a task that changes a doc, and what to
+  look for (the source fact lands on a component entity, not the root). It also gives the counts query
+  to read the result with.
 
 **Not doing:** a dream-state step that moves root facts onto the entity they mention. Only 20 of 433 root
 facts have such a target.
@@ -154,8 +155,8 @@ facts have such a target.
 
 - **One PR with items 1-4.** It is roughly 500-900 lines with specs, mostly views, locale and policy.
   There is no migration, no new setting and no tool, parameter or schema change.
-- **Version:** proposed as **1.96.1**, a patch: guidance, a tighter generator and text. Dream State R2
-  stays 1.97.0 and the vector plan's steps 2-4 stay 1.98.0. The kickoff confirms against `version.rb`.
+- **Version: 1.96.1** (Steve, 2026-11-27), a patch: guidance, a tighter generator and text. Dream State
+  R2 stays 1.97.0 and the vector plan's steps 2-4 stay 1.98.0. The kickoff confirms against `version.rb`.
 - **Docs:**
   - `docs/guides/ui-guide.md`: the captions and the guard hint;
   - `docs/dream_state.md` or `docs/summarization.md`, wherever "Outdated by a fact" and NoSharedSubject
@@ -163,14 +164,12 @@ facts have such a target.
   - `docs/mcp_tools.md`: the source-fact placement;
   - the CHANGELOG.
 
-## Questions for Steve
+## Answers (Steve, 2026-11-27)
 
-1. **Item 3's scope:** (a) root only, as agreed; or (b) any one entity (0 of 67 such pairs were right)?
-2. **Item 4's `persist` prompt:** may its text change? It is MCP-visible prompt output; no tool, parameter
-   or schema changes.
-3. **Item 4's check:** measure only (counts after two weeks), or also a short adoption-eval run that you
-   start with your MCP config?
-4. **Version 1.96.1:** OK, or another number?
+1. **Item 3's scope:** any one entity, not only a Project root.
+2. **Item 4's `persist` prompt:** its text changes together with SKILL.md.
+3. **Item 4's check:** the counts after two weeks, plus an adoption-eval run that Steve starts.
+4. **Version:** 1.96.1.
 
 ## What stays out
 
