@@ -43,6 +43,31 @@ RSpec.describe SqlExport::Scope do
     expect(scope.ref_ids).to eq([ core.id ]) # one hop only: SynthCore is a reference, not a row
   end
 
+  it "names no other project through the library: its and its child's edges out to another project, and that project's scan facts on it, stay out" do
+    secret_widget = fs_member!(other, "SecretWidget", "Component")
+    secret_service = fs_member!(other, "SecretService", "Service")
+    MemoryRelation.create!(from_entity: library, to_entity: secret_widget, relation_type: "relates_to")
+    MemoryRelation.create!(from_entity: notes, to_entity: secret_service, relation_type: "depends_on")
+    MemoryRelation.create!(from_entity: library, to_entity: other, relation_type: "relates_to")
+    core = MemoryEntity.create!(name: "SynthCore", entity_type: "Gem")
+    MemoryRelation.create!(from_entity: library, to_entity: core, relation_type: "depends_on")
+    theirs = fs_observe!(library, "SynthLib renders the secret reports.", source: "project_scan:s1:dependency:#{other.id}")
+    mine = fs_observe!(library, "SynthLib parses the feeds.", source: "project_scan:s2:dependency:#{app.id}")
+    manual = fs_observe!(library, "SynthLib is pinned to 2.x.")
+
+    scope = described_class.new([ app.id ])
+
+    names = relation_pairs(scope).flatten
+    expect(names).not_to include("OtherPrj", "SecretWidget", "SecretService")
+    expect(relation_pairs(scope)).to include([ "SynthLib", "depends_on", "SynthCore" ]) # a global library stays a reference
+    expect(scope.ref_ids).to eq([ core.id ])
+    expect(scope.observation_ids).to include(mine.id, manual.id)
+    expect(scope.observation_ids).not_to include(theirs.id)
+
+    alone = described_class.new([ library.id ]) # the library as a root of its own: every fact, every project a reference
+    expect(alone.observation_ids).to include(theirs.id, mine.id, manual.id)
+  end
+
   it "keeps a depends_on to a Project or to a member of another project as a reference" do
     platform = fs_project!("SynthPlatform")
     service = fs_member!(other, "OtherService", "Service")

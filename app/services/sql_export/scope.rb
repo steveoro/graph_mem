@@ -101,13 +101,17 @@ module SqlExport
     end
 
     # Keeps one observation per (entity, content digest), chosen like the importer matches: active
-    # first, then the highest id. The digest is MariaDB's SHA2, the one the importer compares.
+    # first, then the highest id. The digest is MariaDB's SHA2, the one the importer compares. On an
+    # entity held only through the hop (a shared library), the facts another project's scans wrote
+    # (ProjectScanner::GlobalDependencies, source `project_scan:<scan>:dependency:<project id>` for a
+    # Project not in this export) stay out: they hold that project's usage and its id.
     def plan_observations
       @observation_ids = []
       @kept_for = {}
       @entity_roots.keys.each_slice(BATCH) do |slice|
         rows = MemoryObservation.where(memory_entity_id: slice)
-                                .pluck(:id, :memory_entity_id, Arel.sql("SHA2(content, 256)"), Arel.sql("status = 'active'"))
+                                .pluck(:id, :memory_entity_id, Arel.sql("SHA2(content, 256)"), Arel.sql("status = 'active'"), :source)
+        rows.reject! { |_, entity_id, _, _, source| @dependency_ids.include?(entity_id) && other_project_scan_fact?(source) }
         rows.group_by { |_, entity_id, digest, _| [ entity_id, digest ] }.sort_by { |(entity_id, _), group| [ entity_id, group.map(&:first).min ] }
             .each do |_, group|
               kept = group.max_by { |id, _, _, active| [ active.to_i, id ] }.first
@@ -117,14 +121,29 @@ module SqlExport
       end
     end
 
-    # Every relation with an end in the set, but an edge from outside into an entity held only
-    # through the hop (another dependent of a library).
+    # @param source [String, nil] an observation's source
+    # @return [Boolean] a fact a scan of a Project outside this export wrote onto a shared library
+    def other_project_scan_fact?(source)
+      project_id = source.to_s[/\Aproject_scan:.*:#{ProjectScanner::GlobalDependencies::DEPENDENCY_PHASE}:(\d+)\z/, 1]
+      project_id.present? && !@projects.include?(project_id.to_i)
+    end
+
+    # Every relation with an end in the set, but none that would name another project through an
+    # entity held only through the hop (a shared library or its child): not an edge from outside into
+    # such an entity (another dependent of the library), and not one from it out to a member of
+    # another project or to a Project. A library's own depends_on to another global library stays,
+    # as a reference.
     def plan_relations
       ids = @entity_roots.keys
       found = ids.each_slice(BATCH).flat_map do |slice|
         MemoryRelation.where(from_entity_id: slice).or(MemoryRelation.where(to_entity_id: slice)).pluck(:id, :from_entity_id, :to_entity_id)
       end.uniq
       found.reject! { |_, from, to| !@entity_roots.key?(from) && @dependency_ids.include?(to) }
+      outside = found.filter_map { |_, from, to| to if @dependency_ids.include?(from) && !@entity_roots.key?(to) }.uniq
+      scoped = outside.each_slice(BATCH).flat_map do |slice|
+        MemoryEntity.where(id: slice).where("project_id IS NOT NULL OR entity_type = ?", NodeOperationsStrategy::PROJECT_ENTITY_TYPE).pluck(:id)
+      end.to_set
+      found.reject! { |_, from, to| @dependency_ids.include?(from) && scoped.include?(to) }
       @relation_ids = found.map(&:first).sort
       @ref_ids = found.flat_map { |_, from, to| [ from, to ] }.uniq.reject { |id| @entity_roots.key?(id) }.sort
     end

@@ -413,9 +413,11 @@ sessions.
   - *The export's hop* (`SqlExport::Scope`) applies to every exported Project, nested ones included
     (with `NESTED=0`, to the roots only). It runs after every tree is in, so a library that is also a
     root, or in a root's tree, keeps all its edges. An edge from outside the export into an entity held
-    only through the hop (another project's `depends_on`) is left out, so the script names no other
-    project for it. A library's own `depends_on`, a member's `depends_on` and the Projects nested under
-    a library are not followed. The template didn't change: the format stays v1.
+    only through the hop (another project's `depends_on`) is left out. After Graphy's first review of
+    R1b-2, so is an edge from such an entity out to another project's member or to a Project, and so are
+    the facts another project's scans wrote onto the library: the script names no other project through
+    it. A library's own `depends_on`, a member's `depends_on` and the Projects nested under a library are
+    not followed. The template didn't change: the format stays v1.
   - *The roots* are `part_of` only, as the Kickoff decided: `GET /data_exchange/root_nodes` and the
     export picker list a global library, also one that `depends_on` another.
 - **R1b-2, the round trips** (the Kickoff asked to record what happens). The two fixes are the lead's
