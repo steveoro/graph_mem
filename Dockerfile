@@ -41,6 +41,10 @@ RUN bundle install && \
 
 COPY . .
 
+# A fresh clone has no config/database.yml (git-ignored): use the example (#206). A local one in the
+# build context is kept as it is.
+RUN [ -f config/database.yml ] || cp config/database.example.yml config/database.yml
+
 RUN bundle exec bootsnap precompile app/ lib/
 
 RUN SECRET_KEY_BASE_DUMMY=1 ./bin/rails assets:precompile
