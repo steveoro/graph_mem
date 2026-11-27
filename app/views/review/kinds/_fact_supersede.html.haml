@@ -29,7 +29,9 @@
   %p.review-hint= "Suggested replacement: #{payload['replacement'].to_s.truncate(300)}"
 - if observation&.active? && row.pending?
   .review-detail__actions
-    = link_to "Supersede…", review_row_preview_path(row.row_uuid, fact_action: "supersede"), class: "ui-btn ui-btn-primary",
-      data: { turbo_frame: "review-detail", testid: "fact-supersede-supersede" }
-    = link_to "Retire…", review_row_preview_path(row.row_uuid, fact_action: "retire"), class: "ui-btn",
-      data: { turbo_frame: "review-detail", testid: "fact-supersede-retire" }
+    = review_action(row, :supersede, id: payload["observation_id"]) do |caption_id|
+      = link_to "Supersede…", review_row_preview_path(row.row_uuid, fact_action: "supersede"), class: "ui-btn ui-btn-primary",
+        data: { turbo_frame: "review-detail", testid: "fact-supersede-supersede" }, aria: { describedby: caption_id }
+    = review_action(row, :retire, id: payload["observation_id"]) do |caption_id|
+      = link_to "Retire…", review_row_preview_path(row.row_uuid, fact_action: "retire"), class: "ui-btn",
+        data: { turbo_frame: "review-detail", testid: "fact-supersede-retire" }, aria: { describedby: caption_id }

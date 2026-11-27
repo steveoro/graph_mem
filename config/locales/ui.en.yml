@@ -32,6 +32,37 @@ en:
       done: "Done. Pick the next suggestion."
       policies_queued: "Review policies queued; the numbers update when the run finishes."
       imported: "Imported %{count} new merge suggestion(s)."
+      # 1.96.1: the caption under each Review action (ReviewHelper#review_action_caption): the
+      # kind's own key, else the action's default. Each says what the action really does.
+      actions:
+        default:
+          preview: "Opens a confirm card with what applying changes; nothing is written yet."
+          apply: "Writes the changes listed above; the undo line above says whether Undo can revert them."
+          apply_now: "Applies it now, with no confirm card; Undo in the toast reverts it."
+          dismiss: "Not right: nothing changes, and this suggestion isn't made again (Restore brings it back)."
+          snooze: "Not now: hidden for %{days} days, then back in the queue at the next policy run."
+          restore: "Back to pending, its suppression lifted; an applied change stays applied (Undo reverts that)."
+          cancel: "Back to the suggestion; nothing is written."
+          save: "Keeps your edits on the suggestion; nothing is applied yet."
+          choose: "Opens the suggestion to choose; nothing is written yet."
+        contradiction:
+          choose: "Opens both sides to keep one; nothing is written yet."
+          keep: "Opens a confirm card: keeps #%{id} and marks #%{other} obsolete; Undo brings it back."
+          dismiss: "Both facts stay as they are, and this pair isn't flagged again (Restore brings it back)."
+        fact_supersede:
+          choose: "Opens the fact and #%{id} side by side to supersede or retire it; nothing is written yet."
+          supersede: "Opens a confirm card to replace #%{id} with a text you can edit; the old one stays as history, and Undo brings it back."
+          retire: "Opens a confirm card to mark #%{id} obsolete, with no replacement; Undo brings it back."
+          confirm_supersede: "Replaces #%{id} with this text; the old one stays as history (superseded), and Undo brings it back."
+          confirm_retire: "Marks #%{id} obsolete, with no replacement; Undo brings it back."
+          dismiss: "The fact doesn't outdate it: nothing changes, and this pair isn't proposed again (Restore brings it back)."
+        relation_retype:
+          move: "Opens a confirm card: the child leaves %{parent} for %{target} (its scope follows), and the variant edge goes; Undo reverts it."
+          keep: "Opens a confirm card: the child stays part_of %{parent}, and the variant becomes relates_to; Undo reverts it."
+        relation_review:
+          dismiss: "The relation still holds: nothing changes, and this fact isn't flagged against it again (Restore brings it back)."
+        delete_entity:
+          apply: "Deletes the entity as listed above; this can't be undone."
       contradiction:
         differs: "Differs from the other side: %{own} here, %{other} there"
       keyword_path:

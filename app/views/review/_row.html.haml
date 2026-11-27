@@ -1,4 +1,5 @@
--# One suggestion in a group or a search result.
+-# One suggestion in a group or a search result. 1.96.1: the list stays one line; each action
+-# carries its caption as a title (ReviewHelper#review_action_caption).
 - choice = ReviewRowClassifier::CHOICE_KINDS.include?(row.kind)
 - informational = ReviewRowClassifier::INFORMATIONAL_KINDS.include?(row.kind)
 - confirm = choice || !ReviewRowClassifier::SAFE_BULK_KINDS.include?(row.kind)
@@ -10,12 +11,17 @@
   .review-row__actions
     -# An informational row (R1c's relation_review) has Dismiss and Snooze only.
     - if choice
-      = link_to (row.kind == "fact_supersede" ? "Supersede or retire…" : "Choose a side"), review_row_path(row.row_uuid), class: "ui-btn", data: { turbo_frame: "review-detail", review_keys_action: "apply" }
+      = link_to (row.kind == "fact_supersede" ? "Supersede or retire…" : "Choose a side"), review_row_path(row.row_uuid), class: "ui-btn",
+        title: review_action_caption(row.kind, :choose, id: row.effective_payload["observation_id"]), data: { turbo_frame: "review-detail", review_keys_action: "apply" }
     - elsif informational
       %span.review-hint= t("ui.review.relation_review.informational_short")
     - elsif confirm
-      = link_to "#{review_apply_label(row.kind)}…", review_row_preview_path(row.row_uuid), class: "ui-btn", data: { turbo_frame: "review-detail", review_keys_action: "apply" }
+      = link_to "#{review_apply_label(row.kind)}…", review_row_preview_path(row.row_uuid), class: "ui-btn", title: review_action_caption(row.kind, :preview),
+        data: { turbo_frame: "review-detail", review_keys_action: "apply" }
     - else
-      = button_to "Apply", review_row_apply_path(row.row_uuid), class: "ui-btn ui-btn-primary", form: { data: { review_keys_action: "apply" } }
-    = button_to "Dismiss", review_row_dismiss_path(row.row_uuid), class: "ui-btn", form: { data: { review_keys_action: "dismiss" } }
-    = button_to "Snooze", review_row_snooze_path(row.row_uuid), class: "ui-btn", form: { data: { review_keys_action: "snooze" } }
+      = button_to "Apply", review_row_apply_path(row.row_uuid), class: "ui-btn ui-btn-primary", title: review_action_caption(row.kind, :apply_now),
+        form: { data: { review_keys_action: "apply" } }
+    = button_to "Dismiss", review_row_dismiss_path(row.row_uuid), class: "ui-btn", title: review_action_caption(row.kind, :dismiss),
+      form: { data: { review_keys_action: "dismiss" } }
+    = button_to "Snooze", review_row_snooze_path(row.row_uuid), class: "ui-btn", title: review_action_caption(row.kind, :snooze),
+      form: { data: { review_keys_action: "snooze" } }

@@ -1,4 +1,5 @@
 -# The detail pane (Turbo Frame "review-detail"): the row per kind, its edit fields, what applying does.
+-# 1.96.1: each action has a caption under it (ReviewHelper#review_action).
 - editable = ReviewHelper::EDITABLE_KINDS.include?(row.kind)
 = turbo_frame_tag "review-detail" do
   %section.ui-card.review-detail__card{ data: { testid: "review-detail-card", kind: row.kind } }
@@ -10,7 +11,8 @@
       data: { controller: "review-entity-picker", turbo_frame: "_top" } do
       = render "review/kinds/#{lookup_context.exists?(row.kind, [ 'review/kinds' ], true) ? row.kind : 'generic'}", row: row, payload: row.effective_payload
       - if editable && row.pending?
-        = submit_tag "Save", class: "ui-btn", data: { review_keys_action: "edit" }
+        = review_action(row, :save) do |caption_id|
+          = submit_tag "Save", class: "ui-btn", data: { review_keys_action: "edit" }, aria: { describedby: caption_id }
     - choice = ReviewRowClassifier::CHOICE_KINDS.include?(row.kind)
     -# An informational row (R1c) has nothing to apply: its card says why.
     - unless choice || ReviewRowClassifier::INFORMATIONAL_KINDS.include?(row.kind)
@@ -18,11 +20,18 @@
     .review-detail__actions
       - if row.pending?
         - if review_offers_apply?(row, preview)
-          = link_to "#{review_apply_label(row.kind)}…", review_row_preview_path(row.row_uuid), class: "ui-btn ui-btn-primary", data: { turbo_frame: "review-detail" }
-        = button_to (row.kind == "contradiction" ? "Both are right" : "Dismiss"), review_row_dismiss_path(row.row_uuid), class: "ui-btn",
-          data: { testid: "detail-dismiss" }
-        = button_to "Snooze 30 days", review_row_snooze_path(row.row_uuid), class: "ui-btn"
+          = review_action(row, :preview) do |caption_id|
+            = link_to "#{review_apply_label(row.kind)}…", review_row_preview_path(row.row_uuid), class: "ui-btn ui-btn-primary",
+              data: { turbo_frame: "review-detail" }, aria: { describedby: caption_id }
+        = review_action(row, :dismiss) do |caption_id|
+          = button_to (row.kind == "contradiction" ? "Both are right" : "Dismiss"), review_row_dismiss_path(row.row_uuid), class: "ui-btn",
+            data: { testid: "detail-dismiss" }, aria: { describedby: caption_id }
+        = review_action(row, :snooze) do |caption_id|
+          = button_to "Snooze #{CompactionReviewService::SNOOZE_DAYS} days", review_row_snooze_path(row.row_uuid), class: "ui-btn",
+            aria: { describedby: caption_id }
       - else
-        = button_to "Restore", review_row_restore_path(row.row_uuid), class: "ui-btn", form: { data: { review_keys_action: "restore" } }
-      - if row.resolution_reason.present?
-        %p.review-hint= row.resolution_reason
+        = review_action(row, :restore) do |caption_id|
+          = button_to "Restore", review_row_restore_path(row.row_uuid), class: "ui-btn", form: { data: { review_keys_action: "restore" } },
+            aria: { describedby: caption_id }
+    - if row.resolution_reason.present?
+      %p.review-hint= row.resolution_reason

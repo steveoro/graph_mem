@@ -26,7 +26,9 @@
     %p.review-warning{ data: { testid: "relation-retype-has-parent" } }= t("#{scope}.has_parent", child: names[payload["from_entity_id"].to_i] || payload["from_name"], parent: parent_name)
     - if row.pending?
       .review-detail__actions
-        = link_to t("#{scope}.move", target: target_name), review_row_preview_path(row.row_uuid, parent_choice: "move"),
-          class: "ui-btn ui-btn-primary", data: { turbo_frame: "review-detail", testid: "relation-retype-move" }
-        = link_to t("#{scope}.keep", parent: parent_name), review_row_preview_path(row.row_uuid, parent_choice: "keep"),
-          class: "ui-btn", data: { turbo_frame: "review-detail", testid: "relation-retype-keep" }
+        = review_action(row, :move, parent: parent_name, target: target_name) do |caption_id|
+          = link_to t("#{scope}.move", target: target_name), review_row_preview_path(row.row_uuid, parent_choice: "move"),
+            class: "ui-btn ui-btn-primary", data: { turbo_frame: "review-detail", testid: "relation-retype-move" }, aria: { describedby: caption_id }
+        = review_action(row, :keep, parent: parent_name) do |caption_id|
+          = link_to t("#{scope}.keep", parent: parent_name), review_row_preview_path(row.row_uuid, parent_choice: "keep"),
+            class: "ui-btn", data: { turbo_frame: "review-detail", testid: "relation-retype-keep" }, aria: { describedby: caption_id }
