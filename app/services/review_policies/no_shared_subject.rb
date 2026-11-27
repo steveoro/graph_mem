@@ -3,7 +3,8 @@
 module ReviewPolicies
   # Dismisses pending pair rows by their keyword paths (1.78.0, SubjectCheck): contradiction rows
   # the detector would no longer pair, "Outdated by a fact" rows for unrelated facts (judged ones too,
-  # since 1.80.0), and unjudged ones that aren't the same fact with a different detail (1.82.0).
+  # since 1.80.0; since 1.96.1 also two facts on one entity whose LLM words share nothing), and
+  # unjudged ones that aren't the same fact with a different detail (1.82.0).
   # Cleans the backlog the generators seeded before they read the paths. Off with fact keywords off. No suppression: a fact whose text changes is judged again.
   # Reverse: Undo the run, or Restore the row.
   class NoSharedSubject < Base

@@ -4,7 +4,12 @@
 = form_with url: review_row_apply_path(row.row_uuid), method: :post, class: "ui-form", data: { turbo_frame: "_top", testid: "fact-supersede-apply-form" } do
   = hidden_field_tag :fact_action, plan.action, id: nil
   - if plan.action == "supersede"
+    -# 1.96.1: the text is pre-filled with the judge's replacement, so a guard's hint goes here too.
+    - if (guard_hint = review_guard_hint(row.effective_payload))
+      %p.review-hint{ data: { testid: "fact-supersede-apply-guard-hint" } }= guard_hint
     = label_tag "replacement-#{row.row_uuid}", "Replacement text", class: "ui-label"
     = text_area_tag :replacement, plan.replacement, id: "replacement-#{row.row_uuid}", class: "ui-input", rows: 3, required: true,
       maxlength: ExploreEdits::Observations::MAX_OBSERVATION_LENGTH
-  = submit_tag (plan.action == "supersede" ? "Supersede" : "Retire"), class: "ui-btn ui-btn-primary", data: { testid: "preview-confirm" }
+  - supersede = plan.action == "supersede"
+  = review_action(row, supersede ? :confirm_supersede : :confirm_retire, id: row.effective_payload["observation_id"]) do |caption_id|
+    = submit_tag (supersede ? "Supersede" : "Retire"), class: "ui-btn ui-btn-primary", data: { testid: "preview-confirm" }, aria: { describedby: caption_id }

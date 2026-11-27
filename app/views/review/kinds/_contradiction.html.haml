@@ -1,4 +1,5 @@
 -# The two sides of a contradiction, read live. Keep this → preview card → Apply; Dismiss = "Both are right".
+-# 1.96.1: each Keep this has its caption (ReviewHelper#review_action).
 - ids = [ payload["observation_id_1"], payload["observation_id_2"] ].map(&:to_i)
 - sides = MemoryObservation.where(id: ids).includes(:memory_entity).index_by(&:id)
 - pair = ids.map { |id| sides[id] }
@@ -20,5 +21,6 @@
       %p.review-hint= observation ? "#{observation.status} · #{time_ago_in_words(observation.created_at)} old" : "gone"
       = render "review/kinds/keyword_path", observation: observation, shared: shared
       - if observation&.active? && row.pending?
-        = link_to "Keep this", review_row_preview_path(row.row_uuid, keep_observation_id: id), class: "ui-btn ui-btn-primary",
-          data: { turbo_frame: "review-detail", review_keys_keep: index + 1, testid: "keep-this-#{index + 1}" }
+        = review_action(row, :keep, suffix: index + 1, id: id, other: ids[1 - index]) do |caption_id|
+          = link_to "Keep this", review_row_preview_path(row.row_uuid, keep_observation_id: id), class: "ui-btn ui-btn-primary",
+            data: { turbo_frame: "review-detail", review_keys_keep: index + 1, testid: "keep-this-#{index + 1}" }, aria: { describedby: caption_id }

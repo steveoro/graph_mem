@@ -118,6 +118,24 @@ required `topic`), and `persist`. `persist` is not served on the readonly
 profile (`/mcp/readonly`, or stdio with `GRAPH_MEM_MCP_PROFILE=readonly`); it
 is omitted from `prompts/list` and `prompts/get` answers "Prompt not found".
 
+**Where facts go (1.96.1).** The `persist` prompt's step 4 and the skill's "Persist" section give the
+same placement rules:
+- user preferences on the global "User Preferences" entity, project conventions on
+  "<Project> Conventions", and every other fact on the most specific existing entity it is about, not
+  on the Project entity;
+- a **source fact** (tag `source-fact`, one per statement changed in a README or doc, with a
+  `docs:<path>` source; the skill also allows `official:<url>` and a `replaces:<old term>` tag) on the
+  entity the changed statement is about: search for
+  it, and create it `part_of` the Project if it doesn't exist. The Project entity only takes a
+  statement about the whole project;
+- a shallow tree: Project → Component or Feature → Task or Issue, three levels at most. An Issue goes
+  `part_of` its component, and its fix is a PossibleSolution that `solves` it.
+
+Why: a fact held by the Project root reads, by its keyword path, as about the whole project, so
+"Outdated by a fact" can't tell a root-held source fact from the root's other facts. Before 1.96.1 the
+skill put every source fact on the root. The prompt's description, the only part `prompts/list`
+returns, is unchanged.
+
 ## Successful Tool Metadata
 
 Every successful tool result includes `version` and, where useful,
@@ -221,7 +239,7 @@ merge with other writes, are recorded but can't be undone. Agents can't undo: th
   - `fact_observation_id` (integer, `outdated_by_fact` only, required there): an active source fact (tag `source-fact`) of `entity_id`.
   - `terms` (array of strings, `outdated_by_fact` only): up to 5 search terms, 2-100 characters each, besides the fact's `replaces:` tags.
   - `seed_review` (boolean, `outdated_by_fact` only, default: true): seed the proposals as `fact_supersede` review rows. With `false` nothing is written, and pairs that already have a row aren't sent to the judge.
-  - In `outdated_by_fact` mode `max_results` is at most 50 and `max_distance` is ignored. Pairs that already have a pending row or a dismissal are skipped (`already_known` counts them). With the LLM judge on, one call waits for at most 2 judge batches (16 candidates); the rest are counted in `unjudged_over_cap` (so they can be told from LLM-off ones) and judged later by a background `FactSupersedeJob`; since 1.82.0 only a same fact with a different detail also comes back now as an `unjudged` proposal. The job re-judges pending `unjudged` rows whenever the LLM is usable (a `superseded` verdict refreshes the row; `still_valid` or `unrelated` dismisses it without suppression). Any of the three fact arguments without the mode, or a fact that isn't an active source fact of the entity, is an argument error with a `next_move`.
+  - In `outdated_by_fact` mode `max_results` is at most 50 and `max_distance` is ignored. Pairs that already have a pending row or a dismissal are skipped (`already_known` counts them). A pair the keyword paths call unrelated is neither judged nor proposed unless one of the terms matched it, and since 1.96.1 neither is a pair of facts on one entity that mention no entity and share no LLM word (no parameter or schema change). With the LLM judge on, one call waits for at most 2 judge batches (16 candidates); the rest are counted in `unjudged_over_cap` (so they can be told from LLM-off ones) and judged later by a background `FactSupersedeJob`; since 1.82.0 only a same fact with a different detail also comes back now as an `unjudged` proposal. The job re-judges pending `unjudged` rows whenever the LLM is usable (a `superseded` verdict refreshes the row; `still_valid` or `unrelated` dismisses it without suppression). Any of the three fact arguments without the mode, or a fact that isn't an active source fact of the entity, is an argument error with a `next_move`.
 - **Review rows:** the default mode only reports. Contradiction review rows come from the scheduled stale scan alone; apply one with `apply_maintenance_review` and `action_params.keep_observation_id`.
 - **`outdated_by_fact` response:** `mode`, `entity_id`, `name`, `fact_observation_id`, `searched` (false: no vectors and no terms), `judged`, `unjudged_over_cap`, `candidate_count`, `kept_by_guard`, `already_known`, `proposal_count`, `seeded_count` and `proposals` (`observation_id`, `entity_id`, `entity_name`, `project_id` (null when the entity has no project), `content`, `verdict` (`superseded` or `unjudged`), `confidence`, `reason`, `replacement`, `guard`, `guard_reason`, `signals`, `review_row_id`). It searches the fact's project only and never writes observations; apply a row with `apply_maintenance_review`.
 

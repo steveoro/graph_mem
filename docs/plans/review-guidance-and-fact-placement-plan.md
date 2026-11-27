@@ -1,6 +1,6 @@
 # Plan: Review guidance and fact placement
 
-> Status: draft, 2026-11-27, written on `main` at 1.96.0. Steve asked for it on 2026-11-26 after an
+> Status: built in 1.96.1, 2026-11-27 (see "As built (1.96.1)"). Draft written on `main` at 1.96.0. Steve asked for it on 2026-11-26 after an
 > "Outdated by a fact" row he couldn't place. He agreed to items 1-4 and asked for the plan once Dream
 > State R1b shipped. He answered the plan's four questions on 2026-11-27 (see "Answers"). The plan has
 > one PR and one kickoff.
@@ -180,6 +180,53 @@ What they say:
 
 **Not doing:** a dream-state step that moves root facts onto the entity they mention. Only 20 of 433 root
 facts have such a target.
+
+## As built (1.96.1)
+
+- **Item 1, captions.** `ReviewHelper#review_action` (a row's action) and `#review_captioned` (any
+  caption, the group confirm card's too) put the caption under the button with `aria-describedby`;
+  `#review_action_caption` reads `ui.review.actions.<kind>.<action>`, else `ui.review.actions.default.<action>`.
+  - Default actions: `preview` (Apply… and Repair…), `confirm` (the confirm card's write), `apply_now` (a
+    safe kind's list-row Apply), `dismiss`, `snooze`, `restore`, `cancel`, `save` and `choose` (the list
+    row's link of a choice kind). Kind keys: contradiction `keep`, `dismiss`, `choose`; fact_supersede
+    `supersede`, `retire`, `dismiss`, `choose`, and `confirm_supersede` / `confirm_retire` (one kind with
+    two writes, so two confirm keys); relation_retype `move`, `keep`; relation_review `dismiss`;
+    delete_entity `confirm`; and the kind `group` (`apply_high`, `open`, `dismiss_all`, `snooze`,
+    `confirm_apply`, `confirm_dismiss`, `confirm_snooze`).
+  - Written from the services, not the drafts: Dismiss always suppresses the row's signature (every row
+    has one), so it isn't made again until Restore; Snooze hides it for 30 days and the next policy run
+    after that reopens it; Restore lifts the suppression but leaves an applied change applied (Undo
+    reverts that); a delete_entity confirm can't be undone.
+  - Besides the plan's buttons: Save (an editable kind) and the group card's Review link have captions,
+    so every `.ui-btn` of the cards has one. The group cards carry theirs as a `title`, like the list rows
+    and the resolved list's Restore: with visible captions, each group in the digest and the grouped lists
+    grew four stacked lines (seen in a render at 1280 px, the lead's call). The group confirm card shows
+    its caption in full.
+  - `spec/requests/review_action_captions_spec.rb` seeds a pending row of every kind the classifier names
+    (relation_retype as retype, choice, swap and add), follows each detail card's preview links, and
+    checks every `.ui-btn` of the detail, confirm, group and group confirm cards.
+- **Item 2, guard hint.** `ReviewHelper#review_guard_hint`, for a `context` guard only: under the Guard
+  line and above the confirm card's pre-filled text (supersede only). In front of the card's suggested
+  replacement, a short note says it was written across the guard above. The full hint there would repeat
+  the paragraph just above it on the same card (seen in a render; the lead's call). It leads "The guard disagrees with the judge:" on a `superseded` verdict and "… with this
+  proposal:" on an unjudged row, and says "newer observation" instead of "source fact" on a
+  contradiction-fallback row.
+- **Item 3, words-unrelated pairs.** `Comparison#words_unrelated?` (`subject == :unrelated && by_words`)
+  is read by `FactSupersede::Candidates#candidate_subject` (now `:unrelated`, so `Candidate#unrelated?`
+  skips it unless a term matched) and by `ReviewPolicies::SubjectCheck` (`fact_supersede_status`
+  dismisses it judged or not; `reason` gives the new `REASON_NO_SHARED_WORD`). `hard_unrelated?` and the
+  contradiction branch are unchanged, and `FactSupersede::ContradictionFallback` needs nothing: its
+  pairs are `:unknown` ones, which a words-unrelated pair isn't. The read-only `review_report` task
+  counts the new reason on its fact_supersede line. Two existing examples changed with the rule
+  (`keywords_spec`, `no_shared_subject_spec`: Steve's 1.83.0 "still judged" rule, now reversed);
+  `spec/services/fact_supersede/words_unrelated_spec.rb` covers the rest.
+- **Item 4, placement text.** SKILL.md's Homes bullet now ends on "every other fact on the most specific
+  existing entity", a new bullet gives the shallow tree, and the source-fact bullet places the fact
+  on the entity the statement is about. The persist prompt's step 4 carries the same sentences (its
+  description, the snapshotted part, is unchanged). `spec/prompts/persist_placement_spec.rb` checks
+  that both texts hold the same rule sentences.
+- **Measuring:** the PR body has the adoption-eval session and the counts query (`bin/rails runner -`,
+  read-only, counts only).
 
 ## Order, size and version
 

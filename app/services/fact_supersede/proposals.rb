@@ -7,7 +7,8 @@ module FactSupersede
   # `superseded` and `unjudged` ones become `fact_supersede` rows ("Outdated by a fact"). A pair the
   # keyword paths call unrelated and no search term found (Candidate#unrelated?) is neither judged
   # nor proposed (1.80.0; 1.78.0 skipped only its unjudged row): the paths already say the two facts
-  # are about different things, so a `superseded` verdict on it would be the judge's mistake.
+  # are about different things, so a `superseded` verdict on it would be the judge's mistake. Since
+  # 1.96.1 the same goes for two facts on one entity whose LLM words share nothing.
   #
   # Pairs that already have a row aren't judged again, except a pending `unjudged` row while the
   # LLM is usable (seeded with the LLM off, or past the tool's cap): a `superseded` verdict

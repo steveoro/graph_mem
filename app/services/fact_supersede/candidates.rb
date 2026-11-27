@@ -85,12 +85,14 @@ module FactSupersede
                     same_fact: comparison&.same_fact_different_detail?)
     end
 
-    # The candidate's subject: unrelated by LLM words alone counts as unknown, so the pair is still
-    # judged (1.83.0); unrelated by entity mentions stays the hard skip.
+    # The candidate's subject. Unrelated by entity mentions or, since 1.96.1, by LLM words
+    # (Comparison#words_unrelated?, any one entity) is :unrelated, which Candidate#unrelated? skips
+    # unless a search term matched; 1.83.0 to 1.96.0 read the words' answer as :unknown and judged it.
     def candidate_subject(comparison)
       return nil unless comparison
+      return :unrelated if comparison.words_unrelated?
 
-      comparison.subject == :unrelated && comparison.by_words ? :unknown : comparison.subject
+      comparison.subject
     end
 
     # 1.82.0: only a candidate about the same subject, which the fact covers, is boosted; most when

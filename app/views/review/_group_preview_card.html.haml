@@ -20,4 +20,6 @@
         = hidden_field_tag :min_confidence, preview[:min_confidence] if preview[:min_confidence]
         - preview[:included].each do |row|
           = hidden_field_tag "row_uuids[]", row[:row_uuid], id: nil
-        = submit_tag labels[preview[:op]], class: "ui-btn ui-btn-primary", data: { testid: "group-preview-confirm" }
+        -# 1.96.1: the confirm's caption (ReviewHelper#review_captioned, kind "group").
+        = review_captioned("group", [ review_group_dom_id(preview[:group_key]), "confirm", preview[:op] ], "confirm_#{preview[:op]}") do |caption_id|
+          = submit_tag labels[preview[:op]], class: "ui-btn ui-btn-primary", data: { testid: "group-preview-confirm" }, aria: { describedby: caption_id }

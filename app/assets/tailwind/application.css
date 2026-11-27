@@ -493,6 +493,30 @@
     align-items: center;
   }
 
+  /* 1.96.1: a Review action with its caption under it (ReviewHelper#review_action). */
+  .review-detail__actions,
+  .review-group__actions {
+    align-items: flex-start;
+  }
+
+  .review-action {
+    display: grid;
+    gap: 0.25rem;
+    justify-items: start;
+    align-content: start;
+    flex: 1 1 12rem;
+    max-width: 20rem;
+  }
+
+  /* In a form's column flexbox the 12rem basis would be a height: the action keeps its own size. */
+  .ui-form > .review-action {
+    flex: none;
+  }
+
+  .review-action__caption {
+    margin: 0;
+  }
+
   .review-group__meta,
   .review-row__meta,
   .review-hint {

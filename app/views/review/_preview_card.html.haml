@@ -1,4 +1,5 @@
 -# Server-rendered confirm card for one row (no JS confirm): what applying does, then Apply.
+-# 1.96.1: each action has a caption under it (ReviewHelper#review_action).
 = turbo_frame_tag "review-detail" do
   %section.ui-card.review-preview{ data: { testid: "review-preview-card" } }
     %h2= "#{review_apply_label(row.kind)}: #{review_row_title(row)}"
@@ -13,6 +14,8 @@
         - apply_params[:parent_choice] = params[:parent_choice] if row.kind == "relation_retype" && params[:parent_choice].present?
         - if row.kind == "orphan_parent"
           - apply_params[:parent_id] = CompactionReviewApplier.orphan_parent_id(row.effective_payload, params.permit(:parent_id).to_h)
-        = button_to review_apply_label(row.kind), review_row_apply_path(row.row_uuid), class: "ui-btn ui-btn-primary",
-          params: apply_params, form: { data: { turbo_frame: "_top" } }, data: { testid: "preview-confirm" }
-      = link_to "Cancel", review_row_path(row.row_uuid), class: "ui-btn", data: { turbo_frame: "review-detail" }
+        = review_action(row, :confirm) do |caption_id|
+          = button_to review_apply_label(row.kind), review_row_apply_path(row.row_uuid), class: "ui-btn ui-btn-primary",
+            params: apply_params, form: { data: { turbo_frame: "_top" } }, data: { testid: "preview-confirm" }, aria: { describedby: caption_id }
+      = review_action(row, :cancel) do |caption_id|
+        = link_to "Cancel", review_row_path(row.row_uuid), class: "ui-btn", data: { turbo_frame: "review-detail" }, aria: { describedby: caption_id }

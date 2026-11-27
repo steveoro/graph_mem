@@ -18,9 +18,9 @@ module FactKeywords
   #
   # The callers decide what each answer allows: ContradictionDetector pairs only facts about the same
   # subject (or two unknown ones that are very close), FactSupersede neither judges nor seeds an
-  # unrelated pair that no search term found and seeds an unjudged row only for the same fact with a
-  # different detail, and the NoSharedSubject review policy dismisses rows the generators would no
-  # longer seed.
+  # unrelated pair (by the paths, or since 1.96.1 by the LLM words) that no search term found and
+  # seeds an unjudged row only for the same fact with a different detail, and the NoSharedSubject
+  # review policy dismisses rows the generators would no longer seed.
   #
   #   FactKeywords::Relatedness.compare(badge_fact, other_fact)
   #   # => #<data Comparison subject=:related, strong=true, shared=["GogglesDb::Swimmer"]>
@@ -41,10 +41,15 @@ module FactKeywords
     Comparison = Data.define(:subject, :strong, :shared, :same_subject, :covers, :details, :by_words) do
       def related? = subject == :related
 
-      # Unrelated by their entity mentions: the hard skip (never judged, judged rows dismissed).
-      # Unrelated by LLM words alone isn't (Steve, 1.83.0): words are asked per fact and can name one
-      # subject two ways, so such a pair still reaches the judge.
+      # Unrelated by their entity mentions: the hard skip (never judged, judged rows dismissed), and
+      # the contradiction rows' "share no subject" reason.
       def hard_unrelated? = subject == :unrelated && !by_words
+
+      # Unrelated by LLM words (1.83.0): two facts on one entity that mention no entity and share no
+      # word. Since 1.96.1 fact supersede skips such a pair as it skips a #hard_unrelated? one
+      # (FactSupersede::Candidates, ReviewPolicies::SubjectCheck; Steve, 2026-11-27: none of 67 such
+      # rows was right). Contradictions don't use it: their gates need the same subject anyway.
+      def words_unrelated? = subject == :unrelated && by_words
 
       # The first fact is about the same thing as the second, covers all it is about, and states a
       # different detail: it may outdate it ("Updated using Rails 8.1" over "… Rails 8.0").

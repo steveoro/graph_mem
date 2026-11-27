@@ -120,7 +120,8 @@ RSpec.describe "FactSupersede keyword paths" do
     expect(FactSupersede::Judge::PROMPT_RULES).to include('"superseded" requires the statement to be about the same thing as the fact and to differ in a detail')
   end
 
-  it "sends a candidate whose LLM words share nothing with the fact's to the judge, never skipped (Steve, final review)" do
+  # 1.96.1 (Steve, 2026-11-27): 1.83.0 sent such a pair to the judge; none of 67 such rows was right.
+  it "skips a candidate whose LLM words share nothing with the fact's, unless a search term found it" do
     fact = fs_fact!(widget, "Deploys with Kamal 2.")
     old = fs_observe!(widget, "Shipped to production via Capistrano.")
     FactKeywords.compute!(MemoryObservation.where(id: [ fact.id, old.id ]).includes(:memory_entity))
@@ -131,9 +132,10 @@ RSpec.describe "FactSupersede keyword paths" do
 
     candidate = candidates.send(:candidate, old.reload, { old.id => 0.3 }, {})
 
-    expect(candidate.unrelated?).to be(false)
-    expect(candidate).to have_attributes(level: "unclear", same_fact: false)
+    expect(candidate).to have_attributes(subject: :unrelated, level: "unclear", same_fact: false)
+    expect(candidate.unrelated?).to be(true)
     expect(candidate.seed_unjudged?).to be(false)
+    expect(candidates.send(:candidate, old, { old.id => 0.3 }, { old.id => "Capistrano" }).unrelated?).to be(false)
   end
 
   it "leaves candidates as before with fact keywords off" do

@@ -394,7 +394,7 @@ The review rows (`maintenance_report_rows`) that dream-state compaction, the sta
   |---|---|---|
   | `snooze_expiry` | always | snoozed rows whose snooze ended → active, snoozed suppression removed |
   | `dangling` | on | rows pointing at something gone, or whose effect already holds (R1c: a `relation_review` row whose relation is gone, or whose fact is gone or inactive) → dismissed (no suppression) |
-  | `no_shared_subject` | on (needs `fact_keywords_enabled`) | 1.78.0: `contradiction` rows the detector would no longer pair (`ContradictionDetector.still_pairable?` since 1.85.0: dated events, another project's mention, two roots, no shared subject), and `fact_supersede` rows for unrelated facts (no term match; judged rows too since 1.80.0), and since 1.82.0 unjudged rows that aren't the same fact with a different detail (a judged row is never dismissed just for being related), by their keyword paths → dismissed (no suppression). `bin/rails graph_mem:fact_keywords:review_report` counts them first, read-only |
+  | `no_shared_subject` | on (needs `fact_keywords_enabled`) | 1.78.0: `contradiction` rows the detector would no longer pair (`ContradictionDetector.still_pairable?` since 1.85.0: dated events, another project's mention, two roots, no shared subject), and `fact_supersede` rows for unrelated facts (no term match; judged rows too since 1.80.0; since 1.96.1 also two facts on one entity whose LLM words share nothing, with their own reason), and since 1.82.0 unjudged rows that aren't the same fact with a different detail (a judged row is never dismissed just for being related), by their keyword paths → dismissed (no suppression). `bin/rails graph_mem:fact_keywords:review_report` counts them first, read-only |
   | `no_longer_flagged` | on | stale_memory rows the scanner no longer flags → dismissed (no suppression) |
   | `still_qualifies` | on | 1.85.0: `entity_merge`, `relationship_proposal` and `orphan_parent` rows the dream-state producers would no longer queue under their current evidence rules (R1b: an `orphan_parent` row whose entity a Project now `depends_on`, or whose type is dependency-like, too) → dismissed (no suppression) |
   | `expire_low_confidence` | on, 30 days | confidence < 0.4, untouched for N days → expired + 90-day suppression |
@@ -458,10 +458,12 @@ and nothing acts across projects. Step list: `docs/plans/done/fact-supersede-pla
   batches of 20, scoped like summaries; stored in `memory_observations.llm_keywords`, never merged
   with the path nor embedded, `llm_keywords_at` NULL = pending). Two such facts on one entity
   compare by their words (case and plurals folded): one containing the other's is the same subject
-  (with `covers`), some shared is related, none is unrelated, but never the hard skip
-  (`Comparison#hard_unrelated?` is for entity mentions only): such a pair gets no unjudged row and
-  no contradiction pair, yet it is still judged, and `no_shared_subject` never dismisses a judged row
-  on words alone. A scan asks at most 3 word batches inside its reconcile (none after one the LLM
+  (with `covers`), some shared is related, none is unrelated (`Comparison#words_unrelated?`, apart
+  from `hard_unrelated?`, which is for entity mentions only). Such a pair gets no contradiction pair;
+  1.83.0 still judged it for fact supersede, and since 1.96.1 (Steve, 2026-11-27: none of 67 such
+  rows was right) fact supersede skips it like a path-unrelated one, on any one entity: never judged
+  nor proposed unless a search term matched, and `no_shared_subject` dismisses its row, judged or
+  not, with the reason "the facts' LLM words share nothing (one entity, no mentions)". A scan asks at most 3 word batches inside its reconcile (none after one the LLM
   didn't answer); `FactKeywordsJob` asks one project per call and walks past a batch that stamps
   nothing. `FactKeywordsJob` computes pending
   words after the paths (25 batches per run; 1.84.0: no cap inside a scheduled run, which stops
@@ -488,7 +490,8 @@ and nothing acts across projects. Step list: `docs/plans/done/fact-supersede-pla
   one job per fact via Solid Queue's `limits_concurrency`) seeds `fact_supersede` rows
   ("Outdated by a fact") for `superseded` and `unjudged` verdicts only. A pair the keyword paths
   call unrelated and no search term found is neither judged nor proposed (1.80.0; before, only its
-  `unjudged` row was skipped). An `unjudged` row is proposed only for the same fact with a different
+  `unjudged` row was skipped), and since 1.96.1 so is a pair on one entity whose LLM words share
+  nothing (`Candidates#candidate_subject` reads `Comparison#words_unrelated?`). An `unjudged` row is proposed only for the same fact with a different
   detail, or a search-term match (1.82.0; before, for anything not unrelated). Signature
   `fact:<fact>|obs:<observation>`, so a dismissal suppresses that pair alone; run cap 100. The
   kind is a choice kind (never bulk or group applied). `CompactionReviewApplier::FactSupersede`
